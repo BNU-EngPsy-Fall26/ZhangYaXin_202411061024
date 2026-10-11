@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>信号检测论 · 游戏体验</title>
+<style>
+/* ============================================================
+   信号检测论交互实验 · 自主设计样式
+   配色：深青 + 珊瑚橙 + 米白，非任何模板源
+   ============================================================ */
+:root{
+  --ink:#16242b; --paper:#f6f3ec; --card:#ffffff;
+  --teal:#0f4c5c; --teal-d:#0a3744; --coral:#e07a5f;
+  --gold:#c9a227; --line:#dad3c6; --soft:#eef1f0;
+  --good:#2f8f5b; --bad:#c0392b; --warn:#e08e0b; --blue:#2a6f97;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--paper);color:var(--ink);line-height:1.65}
+.mono{font-family:"SFMono-Regular",Consolas,monospace}
+
+/* 顶栏 */
+.topbar{background:var(--teal-d);color:#fff;padding:14px 22px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.topbar h1{font-size:18px;font-weight:600;letter-spacing:.5px}
+.topbar h1 b{color:var(--coral)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:7px 13px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.tab:hover{background:rgba(255,255,255,.2)}
+.tab.on{background:#fff;color:var(--teal-d);font-weight:600}
+
+/* 主体 */
+.wrap{max-width:880px;margin:22px auto;padding:0 16px}
+.view{display:none;animation:in .25s ease}
+.view.on{display:block}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-bottom:18px;box-shadow:0 3px 14px rgba(20,40,50,.05)}
+.panel h2{font-size:17px;color:var(--teal);margin-bottom:12px}
+.panel p{margin-bottom:8px}
+.muted{color:#5d6b74;font-size:13.5px}
+.center{text-align:center}
+.row{display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:center}
+
+/* 按钮 */
+.btn{border:none;border-radius:9px;padding:10px 20px;font-size:15px;cursor:pointer;background:#e6e9ee;color:var(--ink);transition:transform .1s,box-shadow .1s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.12)}
+.btn-p{background:var(--teal);color:#fff}
+.btn-c{background:var(--coral);color:#fff}
+.btn-g{background:var(--gold);color:#fff}
+.big{font-size:17px;padding:13px 30px}
+.btn-danger{background:var(--bad);color:#fff}
+.btn-ok{background:var(--good);color:#fff}
+
+/* 表格 */
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{border:1px solid var(--line);padding:9px 11px;text-align:center}
+.tbl th{background:var(--soft)}
+.t-hit{background:#eaf6ee;color:var(--good)}
+.t-fa{background:#fdeeea;color:var(--bad)}
+.t-miss{background:#fdf3e7;color:var(--warn)}
+.t-cr{background:#e7f0f5;color:var(--blue)}
+
+/* 参数滑块组 */
+.params{display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+@media(max-width:640px){.params{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:13.5px;font-weight:600;color:var(--teal)}
+.field .hint{font-size:12px;color:#5d6b74}
+.field input[type=range]{width:100%;accent-color:var(--teal)}
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row .v{font-family:Consolas,monospace;font-weight:700;color:var(--coral);min-width:44px;text-align:right}
+
+/* 场景卡 */
+.cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:720px){.cards{grid-template-columns:1fr}}
+.card2{background:var(--soft);border:2px solid transparent;border-radius:14px;padding:22px 18px;cursor:pointer;transition:all .25s}
+.card2:hover{transform:translateY(-3px);border-color:var(--coral);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.card2 .ic{font-size:38px;margin-bottom:8px}
+.card2 h3{font-size:16px;color:var(--teal);margin-bottom:4px}
+.card2 .yr{font-size:12px;color:var(--gold);font-weight:700;margin-bottom:8px}
+.card2 p{font-size:13px;color:#5d6b74}
+.card2 .tag{display:inline-block;margin-top:10px;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#fff;color:var(--teal);border:1px solid var(--line)}
+
+/* 游戏 */
+.gbar{display:flex;justify-content:space-between;font-size:13.5px;color:#5d6b74;margin-bottom:8px}
+#gCanvas{display:block;margin:0 auto;border-radius:12px;background:#fff;border:1px solid var(--line);width:100%;max-width:760px;height:auto}
+#fb{font-size:16px;text-align:center;margin:10px 0}
+/* 结果指标盒 */
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+@media(max-width:640px){.metrics{grid-template-columns:repeat(2,1fr)}}
+.mbox{background:var(--soft);border-radius:10px;padding:14px 8px;text-align:center}
+.mbox .l{font-size:12px;color:#5d6b74;margin-bottom:4px}
+.mbox .n{font-size:20px;font-weight:700;color:var(--teal)}
+/* 概念实验室 */
+.lab-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.lab-grid{grid-template-columns:1fr}}
+canvas.chart{display:block;width:100%;max-width:560px;height:auto;border:1px solid var(--line);border-radius:10px;background:#fcfbf7;margin:6px 0}
+footer{padding:20px 0 28px;text-align:center;color:#5d6b74;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>信号检测论 · <b>游戏体验</b></h1>
+  <div class="tabs">
+    <button class="tab on" data-v="home">开始</button>
+    <button class="tab" data-v="select">场景与参数</button>
+    <button class="tab" data-v="play">游戏</button>
+    <button class="tab" data-v="result">结果</button>
+    <button class="tab" data-v="lab">概念实验室</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ========== 开始页 ========== -->
+<section class="view on" id="v-home">
+  <div class="panel center" style="padding:40px 28px">
+    <div style="font-size:46px;margin-bottom:10px">🎯</div>
+    <h2 style="font-size:22px">信号检测论 · 游戏体验</h2>
+    <p class="muted" style="max-width:560px;margin:8px auto 22px">扮演不同角色，在不确定的噪音中辨认信号——玩完之后，看看你的数据告诉了你什么。</p>
+    <button class="btn btn-p big" data-go="select">开始实验 →</button>
+  </div>
+  <div class="panel">
+    <h2>这是什么？</h2>
+    <p>信号检测论（Signal Detection Theory, SDT）研究人在<b>噪音背景中辨认信号</b>的能力与决策倾向。它把"能不能分清"（辨别力 d′）和"敢不敢说有"（判断标准 c）分开——这套工具广泛用于监考、质检、医疗影像、安检等真实判断场景。</p>
+  </div>
+</section>
+
+<!-- ========== 场景与参数 ========== -->
+<section class="view" id="v-select">
+  <div class="panel">
+    <h2>一、各场景的信号 / 噪音定义</h2>
+    <table class="tbl">
+      <tr><th>场景</th><th>信号 S（有）</th><th>噪音 N（无）</th><th>判断任务</th></tr>
+      <tr><td>👀 监考老师</td><td>学生正在作弊</td><td>学生正常答题</td><td>是否报告作弊</td></tr>
+      <tr><td>🎂 蛋糕店质检员</td><td>蛋糕已经变质</td><td>蛋糕新鲜</td><td>是否判为变质下架</td></tr>
+      <tr><td>⚡ 设备检修工</td><td>电路存在故障</td><td>电路运行正常</td><td>是否判定需要维修</td></tr>
+    </table>
+    <p class="muted" style="margin-top:8px">P(S) 是"有信号"试次出现的先验概率；d′ 决定信号与噪音的可分辨程度；c 是你的报告倾向；刺激限时决定每次观察的呈现时长。</p>
+  </div>
+
+  <div class="panel">
+    <h2>二、实验参数</h2>
+    <div class="params">
+      <div class="field">
+        <label>难度 d′（信号强度）</label>
+        <div class="slider-row"><span class="muted">困难0.5</span><input type="range" id="dp" min="0.5" max="3.5" step="0.1" value="1.8"><span class="v" id="dpV">1.8</span></div>
+        <span class="hint">d′ 越小，信号与噪音越重叠，越难判断</span>
+      </div>
+      <div class="field">
+        <label>先验概率 P(S)</label>
+        <div class="slider-row"><span class="muted">10%</span><input type="range" id="ps" min="10" max="80" step="5" value="50"><span class="v" id="psV">50%</span></div>
+        <span class="hint">出现信号的试次比例</span>
+      </div>
+      <div class="field">
+        <label>试次数</label>
+        <div class="slider-row"><input type="number" id="tn" min="20" max="120" step="1" value="20" style="width:84px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font-family:Consolas,monospace;text-align:center"><span class="hint">不少于 20，可 20–120</span></div>
+      </div>
+      <div class="field">
+        <label>刺激限时</label>
+        <div class="slider-row"><span class="muted">1s</span><input type="range" id="tl" min="1" max="5" step="0.5" value="2.6"><span class="v" id="tlV">2.6s</span></div>
+        <span class="hint">每次观察的呈现时长</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>三、选择场景</h2>
+    <div class="cards">
+      <div class="card2" data-sc="proctor">
+        <div class="ic">👀</div><h3>监考老师</h3><div class="yr">期末考试 · 教室</div>
+        <p>考场里大多数学生在认真答题，但偶尔有人偷看邻座、传递纸条、在桌下偷看手机。你能准确抓住真正的作弊吗？</p>
+        <span class="tag">教育场景</span>
+      </div>
+      <div class="card2" data-sc="cake">
+        <div class="ic">🎂</div><h3>蛋糕店质检员</h3><div class="yr">每日 · 烘焙坊</div>
+        <p>柜台上摆着一排当日蛋糕，大多数新鲜可口，但偶尔有一块已开始变质——颜色发暗、表面塌陷、出现霉点。</p>
+        <span class="tag">食品场景</span>
+      </div>
+      <div class="card2" data-sc="circuit">
+        <div class="ic">⚡</div><h3>设备检修工</h3><div class="yr">车间 · 配电柜</div>
+        <p>配电柜里的电路板，大多数运行正常，但偶尔有一处出现故障——焦黑、冒烟、打火、指示灯异常发红。</p>
+        <span class="tag">工业场景</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 游戏 ========== -->
+<section class="view" id="v-play">
+  <div class="panel">
+    <div class="gbar"><span id="gTitle">监考老师</span><span>试次 <b id="gTrial">0</b>/<b id="gTotal">20</b>　击中 <b id="gH">0</b>　误报 <b id="gFA">0</b></span></div>
+    <canvas id="gCanvas" width="760" height="420"></canvas>
+    <div id="fb"></div>
+    <div class="row" id="gBtns" style="display:none">
+      <button class="btn btn-danger big" id="bYes">🚨 有信号 / 报告</button>
+      <button class="btn btn-ok big" id="bNo">😌 无信号 / 正常</button>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 结果 ========== -->
+<section class="view" id="v-result">
+  <div class="panel">
+    <h2 id="rTitle">你的检测成绩</h2>
+    <p class="muted" id="rSub">监考老师 · 20 次判断</p>
+    <h3 style="margin:16px 0 8px;font-size:15px;color:var(--teal)">混淆矩阵</h3>
+    <table class="tbl">
+      <tr><th colspan="2" rowspan="2"></th><th colspan="2">实际情况</th></tr>
+      <tr><th>有信号</th><th>无信号</th></tr>
+      <tr><th rowspan="2">你的判断</th><th>说"有"</th><td class="t-hit">击中 H = <b id="rH">0</b></td><td class="t-fa">误报 FA = <b id="rFA">0</b></td></tr>
+      <tr><th>说"无"</th><td class="t-miss">漏报 M = <b id="rM">0</b></td><td class="t-cr">正确拒斥 CR = <b id="rCR">0</b></td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>四种结果的实际含义</h2>
+    <table class="tbl" style="font-size:13.5px">
+      <tr><th style="width:20%">结果</th><th>本场景中的实际含义</th></tr>
+      <tr><td class="t-hit">击中 H</td><td id="mH">—</td></tr>
+      <tr><td class="t-fa">误报 FA</td><td id="mFA">—</td></tr>
+      <tr><td class="t-miss">漏报 M</td><td id="mM">—</td></tr>
+      <tr><td class="t-cr">正确拒斥 CR</td><td id="mCR">—</td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>SDT 指标</h2>
+    <div class="metrics">
+      <div class="mbox"><div class="l">击中率 P(H)</div><div class="n" id="oPH">—</div></div>
+      <div class="mbox"><div class="l">误报率 P(FA)</div><div class="n" id="oPFA">—</div></div>
+      <div class="mbox"><div class="l">辨别力 d′</div><div class="n" id="oDP">—</div></div>
+      <div class="mbox"><div class="l">判断标准 c</div><div class="n" id="oC">—</div></div>
+      <div class="mbox"><div class="l">准确率</div><div class="n" id="oAcc">—</div></div>
+    </div>
+    <p class="muted" style="margin-top:10px">公式：P(H)=击中/(击中+漏报)，P(FA)=误报/(误报+正确拒斥)，d′=Z(P(H))−Z(P(FA))，c=−0.5×[Z(P(H))+Z(P(FA))]。为避免 0/1 极端值，Z 变换采用 log-linear 校正 (x+0.5)/(n+1)。</p>
+    <div class="panel" style="background:var(--soft);margin-top:14px">
+      <h3 style="font-size:15px;color:var(--teal);margin-bottom:8px">为什么光看准确率不够？</h3>
+      <p class="muted">同样 75% 准确率，谨慎者（只在很确定时报告）与宽松者（稍有可疑就报告）的 d′ 可能相同，但 c 完全相反——准确率会掩盖这一区别。SDT 的价值正是把"分辨能力"与"决策倾向"分离。</p>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>多局成绩对比</h2>
+    <canvas class="chart" id="histCanvas" width="760" height="280" style="max-width:760px"></canvas>
+    <div style="overflow-x:auto">
+      <table class="tbl" id="histTable" style="font-size:13px;margin-top:10px"></table>
+    </div>
+    <div class="center" style="margin-top:10px">
+      <button class="btn" id="clearHist">🗑 清空记录</button>
+    </div>
+  </div>
+  <div class="panel center">
+    <button class="btn" data-go="select">← 换场景</button>
+    <button class="btn btn-p" id="again">🔄 再玩一次</button>
+    <button class="btn btn-g" data-go="lab">进入概念实验室 →</button>
+  </div>
+</section>
+
+<!-- ========== 概念实验室 ========== -->
+<section class="view" id="v-lab">
+  <div class="panel">
+    <h2>概念实验室</h2>
+    <p class="muted">拖动滑块，观察 d′、判断标准 c、先验概率 P(S) 如何改变信号/噪音分布、ROC 曲线与 Z 变换 ROC。</p>
+    <div class="params" style="margin-bottom:14px">
+      <div class="field">
+        <label>辨别力 d′</label>
+        <div class="slider-row"><span class="muted">0</span><input type="range" id="lDp" min="0" max="3.5" step="0.1" value="1.5"><span class="v" id="lDpV">1.5</span></div>
+      </div>
+      <div class="field">
+        <label>判断标准 c</label>
+        <div class="slider-row"><span class="muted">−1.5</span><input type="range" id="lC" min="-1.5" max="1.5" step="0.05" value="0"><span class="v" id="lCV">0.00</span></div>
+      </div>
+      <div class="field">
+        <label>先验概率 P(S)</label>
+        <div class="slider-row"><span class="muted">0.1</span><input type="range" id="lPs" min="0.1" max="0.9" step="0.05" value="0.5"><span class="v" id="lPsV">0.50</span></div>
+      </div>
+    </div>
+
+    <div class="lab-grid">
+      <div>
+        <h3 style="font-size:14px;color:var(--teal);margin-bottom:4px">信号与噪音分布</h3>
+        <canvas class="chart" id="cDist" width="560" height="320"></canvas>
+        <p class="muted" style="font-size:12.5px">蓝=噪音 N(0,1)，橙=信号 N(d′,1)，虚线=判断标准 xc。</p>
+      </div>
+      <div>
+        <h3 style="font-size:14px;color:var(--teal);margin-bottom:4px">ROC 曲线</h3>
+        <canvas class="chart" id="cRoc" width="560" height="320"></canvas>
+        <p class="muted" style="font-size:12.5px">实线=理论 ROC，圆点=当前操作点，对角虚线=猜测水平。</p>
+      </div>
+      <div style="grid-column:1/3">
+        <h3 style="font-size:14px;color:var(--teal);margin-bottom:4px">Z 变换 ROC（zROC）</h3>
+        <canvas class="chart" id="cZRoc" width="560" height="320" style="margin:6px auto"></canvas>
+        <p class="muted" style="font-size:12.5px">横轴 z(FA)，纵轴 z(H)；理论直线 z(H)=d′+z(FA)，斜率≈1，纵截距=d′。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="background:var(--soft)">
+    <h2>SDT 指标（理论值）</h2>
+    <div class="metrics">
+      <div class="mbox"><div class="l">辨别力 d′</div><div class="n" id="lMDP">—</div></div>
+      <div class="mbox"><div class="l">判断标准 c</div><div class="n" id="lMC">—</div></div>
+      <div class="mbox"><div class="l">似然比 β</div><div class="n" id="lMB">—</div></div>
+      <div class="mbox"><div class="l">击中率 P(H)</div><div class="n" id="lMH">—</div></div>
+      <div class="mbox"><div class="l">虚报率 P(FA)</div><div class="n" id="lMFA">—</div></div>
+      <div class="mbox"><div class="l">准确率</div><div class="n" id="lMAcc">—</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>混淆矩阵</h2>
+    <table class="tbl">
+      <tr><th></th><th>说"有"</th><th>说"无"</th></tr>
+      <tr><th>有信号</th><td class="t-hit">击中 P(H)=<b id="lmH">—</b></td><td class="t-miss">漏报 <b id="lmM">—</b></td></tr>
+      <tr><th>无信号</th><td class="t-fa">虚报 P(FA)=<b id="lmFA">—</b></td><td class="t-cr">正确拒斥 <b id="lmCR">—</b></td></tr>
+    </table>
+  </div>
+</section>
+
+</div>
+<footer>工程心理学课程作业</footer>
+
+<script>
+/* ============================================================
+ * 数学工具：正态分布 CDF / 反函数 / 采样
+ * ============================================================ */
+function erf(x){var s=x<0?-1:1;x=Math.abs(x);var t=1/(1+0.3275911*x);var y=1-(((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t)*Math.exp(-x*x);return s*y;}
+function ncdf(x){return 0.5*(1+erf(x/Math.SQRT2));}
+function invN(p){if(p<=0)p=1e-9;if(p>=1)p=1-1e-9;
+  var a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239];
+  var b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  var c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783];
+  var d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];var pl=0.02425,q,r;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p<=1-pl){q=p-0.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+function randN(m,s){var u=Math.random()||1e-9,v=Math.random();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function gpdf(x,mu,s){var z=(x-mu)/s;return Math.exp(-z*z/2)/(s*Math.sqrt(2*Math.PI));}
+
+/* ============================================================
+ * 导航
+ * ============================================================ */
+function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.remove('on'));document.getElementById('v-'+v).classList.add('on');document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));window.scrollTo(0,0);}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>go(t.dataset.v));
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+
+// 参数滑块联动
+function bind(id,fmt){var e=document.getElementById(id);var f=function(){document.getElementById(id+'V').textContent=fmt(e.value);};e.oninput=f;f();}
+bind('dp',v=>parseFloat(v).toFixed(1));
+bind('ps',v=>v+'%');
+bind('tl',v=>parseFloat(v).toFixed(1)+'s');
+bind('lDp',v=>parseFloat(v).toFixed(1));
+bind('lC',v=>parseFloat(v).toFixed(2));
+bind('lPs',v=>parseFloat(v).toFixed(2));
+
+/* ============================================================
+ * 游戏引擎
+ * ============================================================ */
+var G={},gCanvas,gctx,curGame='proctor';
+var TITLES={
+  proctor:['监考老师','观察考场中的学生。如果他出现<b>偷看邻座、传递纸条、桌下看手机</b>等明显异常动作，那可能在作弊——但不总是。观察结束后，请判断刚才该学生是否在作弊。'],
+  cake:['蛋糕店质检员','观察柜台上的这块蛋糕。如果它<b>颜色发暗、表面塌陷、出现霉点</b>，那可能已经变质——但不总是。观察结束后，请判断刚才这块蛋糕是否变质。'],
+  circuit:['设备检修工','观察配电柜里的这块电路板。如果它<b>焦黑、冒烟、打火、指示灯异常发红</b>，那可能需要维修——但不总是。观察结束后，请判断刚才这块电路是否需要维修。']
+};
+var NAMES={proctor:'监考老师',cake:'蛋糕店质检员',circuit:'设备检修工'};
+var MEAN={
+  proctor:{hit:'学生确实在作弊，你举手报告——抓住了真正的作弊者。',fa:'学生并没有作弊，你却报告了他——冤枉了无辜的同学。',miss:'学生确实在作弊，但你没有发现——作弊被放过了。',cr:'学生没有作弊，你也没有报告——正确放行了正常学生。'},
+  cake:{hit:'蛋糕确实已变质，你判为变质下架——避免问题蛋糕卖给顾客。',fa:'蛋糕其实新鲜，你却判为变质——白白浪费了一块好蛋糕。',miss:'蛋糕确实已变质，你却判为新鲜——问题蛋糕卖给了顾客。',cr:'蛋糕新鲜，你也判为新鲜——正确放行。'},
+  circuit:{hit:'电路确实存在故障，你判定需要维修——及时排除了安全隐患。',fa:'电路其实正常，你却判定故障——做了一次不必要的检修。',miss:'电路确实故障，你却判为正常——故障设备继续带病运行。',cr:'电路正常，你也判为正常——正确放行。'}
+};
+var CLR={proctor:'刚才该学生是否在作弊？',cake:'刚才这块蛋糕是否变质？',circuit:'刚才这块电路是否需要维修？'};
+
+document.querySelectorAll('.card2').forEach(c=>c.onclick=()=>startGame(c.dataset.sc));
+document.getElementById('bYes').onclick=()=>respond(true);
+document.getElementById('bNo').onclick=()=>respond(false);
+document.getElementById('again').onclick=()=>startGame(curGame);
+document.addEventListener('keydown',function(e){
+  if(G.phase==='stim'){
+    if(e.key==='f'||e.key==='F')respond(true);
+    if(e.key==='j'||e.key==='J')respond(false);
+  }
+});
+
+function startGame(type){
+  curGame=type||'proctor';
+  var dp=parseFloat(document.getElementById('dp').value);
+  var ps=(parseInt(document.getElementById('ps').value,10)||50)/100;
+  var n=Math.max(20,parseInt(document.getElementById('tn').value,10)||20);
+  var tl=Math.round(parseFloat(document.getElementById('tl').value)*1000);
+  var nSig=Math.round(n*ps);
+  var list=[];for(var i=0;i<n;i++)list.push(i<nSig);
+  for(var i=list.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=list[i];list[i]=list[j];list[j]=t;}
+  G={trial:0,hits:0,fas:0,misses:0,crs:0,phase:'idle',trials:n,list:list,dp:dp,tl:tl};
+  document.getElementById('gTitle').textContent=TITLES[curGame][0];
+  document.getElementById('gTotal').textContent=n;
+  document.getElementById('gH').textContent=0;document.getElementById('gFA').textContent=0;
+  go('play');
+  gCanvas=document.getElementById('gCanvas');gctx=gCanvas.getContext('2d');
+  // 显示指导语 1.2 秒后开始
+  gctx.fillStyle='#16242b';gctx.fillRect(0,0,gCanvas.width,gCanvas.height);
+  gctx.fillStyle='#fff';gctx.font='16px sans-serif';gctx.textAlign='center';
+  gctx.fillText(TITLES[curGame][0],gCanvas.width/2,gCanvas.height/2-20);
+  // 简介文字
+  var txt=TITLES[curGame][1].replace(/<[^>]+>/g,'');
+  wrapText(gctx,txt,gCanvas.width/2,gCanvas.height/2+10,gCanvas.width-80,22);
+  document.getElementById('fb').innerHTML='';
+  document.getElementById('gBtns').style.display='none';
+  setTimeout(nextTrial,1500);
+}
+function wrapText(ctx,txt,x,y,maxW,lh){
+  var chars=txt.split(''),line='',lines=[];
+  for(var i=0;i<chars.length;i++){if(ctx.measureText(line+chars[i]).width>maxW){lines.push(line);line=chars[i];}else line+=chars[i];}
+  lines.push(line);
+  var sy=y-(lines.length-1)*lh/2;
+  lines.forEach(function(ln,i){ctx.fillText(ln,x,sy+i*lh);});
+}
+function updateStats(){document.getElementById('gTrial').textContent=G.trial;document.getElementById('gH').textContent=G.hits;document.getElementById('gFA').textContent=G.fas;}
+function nextTrial(){
+  G.trial++;G.phase='stim';document.getElementById('fb').textContent='';document.getElementById('gBtns').style.display='none';updateStats();
+  G.sig=G.list[G.trial-1];
+  if(curGame==='proctor')drawProctor(G.sig);else if(curGame==='cake')drawCake(G.sig);else drawCircuit(G.sig);
+  setTimeout(function(){G.phase='resp';clearStim();document.getElementById('gBtns').style.display='flex';},G.tl);
+}
+function respond(yes){
+  if(G.phase!=='resp')return;G.phase='done';document.getElementById('gBtns').style.display='none';
+  var fb=document.getElementById('fb');
+  if(G.sig){if(yes){G.hits++;fb.innerHTML='<span style="color:#2f8f5b">✓ 击中！你发现了信号</span>';}else{G.misses++;fb.innerHTML='<span style="color:#c0392b">✗ 漏报！信号其实在那里</span>';}}
+  else{if(yes){G.fas++;fb.innerHTML='<span style="color:#e08e0b">⚠ 误报！其实没有信号</span>';}else{G.crs++;fb.innerHTML='<span style="color:#2a6f97">✓ 正确拒斥</span>';}}
+  updateStats();
+  setTimeout(function(){if(G.trial>=G.trials)finish();else nextTrial();},1100);
+}
+function finish(){
+  var ns=G.hits+G.misses,nn=G.fas+G.crs;
+  var pH=ns>0?G.hits/ns:0,pFA=nn>0?G.fas/nn:0;
+  var pHc=ns>0?(G.hits+0.5)/(ns+1):0.5,pFAc=nn>0?(G.fas+0.5)/(nn+1):0.5;
+  var zH=invN(pHc),zF=invN(pFAc);
+  var dp=zH-zF,c=-(zH+zF)/2,acc=(G.hits+G.crs)/(ns+nn);
+  document.getElementById('rSub').textContent=NAMES[curGame]+' · '+G.trials+' 次判断';
+  document.getElementById('rH').textContent=G.hits;document.getElementById('rFA').textContent=G.fas;
+  document.getElementById('rM').textContent=G.misses;document.getElementById('rCR').textContent=G.crs;
+  document.getElementById('oPH').textContent=pH.toFixed(3);document.getElementById('oPFA').textContent=pFA.toFixed(3);
+  document.getElementById('oDP').textContent=dp.toFixed(3);document.getElementById('oC').textContent=c.toFixed(3);
+  document.getElementById('oAcc').textContent=(acc*100).toFixed(1)+'%';
+  var m=MEAN[curGame]||MEAN.proctor;
+  document.getElementById('mH').textContent=m.hit;document.getElementById('mFA').textContent=m.fa;
+  document.getElementById('mM').textContent=m.miss;document.getElementById('mCR').textContent=m.cr;
+  addHistory({g:NAMES[curGame],dp:dp,c:c,pH:pH,pFA:pFA,acc:acc,n:G.trials});
+  go('result');renderHist();
+}
+// ===== 多局成绩对比（localStorage） =====
+var HK='sdt_history';
+function getHist(){try{return JSON.parse(localStorage.getItem(HK)||'[]');}catch(e){return [];}}
+function saveHist(a){try{localStorage.setItem(HK,JSON.stringify(a));}catch(e){}}
+function addHistory(rec){var a=getHist();a.push(rec);if(a.length>24)a=a.slice(-24);saveHist(a);}
+function clearHist(){saveHist([]);renderHist();}
+function renderHist(){
+  var cv=document.getElementById('histCanvas');if(!cv)return;
+  var ctx=cv.getContext('2d'),W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);
+  var a=getHist(),tbl=document.getElementById('histTable');
+  if(!a.length){tbl.innerHTML='<tr><td style="padding:14px;color:#5d6b74">暂无记录，完成一局后这里会显示对比。</td></tr>';return;}
+  // 明细表
+  var rows='<tr><th>#</th><th>场景</th><th>d′</th><th>c</th><th>P(H)</th><th>P(FA)</th><th>准确率</th><th>试次</th></tr>';
+  for(var i=a.length-1;i>=0;i--){var r=a[i];rows+='<tr><td>'+(i+1)+'</td><td>'+r.g+'</td><td>'+r.dp.toFixed(2)+'</td><td>'+r.c.toFixed(2)+'</td><td>'+r.pH.toFixed(2)+'</td><td>'+r.pFA.toFixed(2)+'</td><td>'+(r.acc*100).toFixed(0)+'%</td><td>'+r.n+'</td></tr>';}
+  tbl.innerHTML=rows;
+  // 折线图：横局次，纵 d′(橙) 与 c(青)
+  var L0=46,R0=W-20,T0=22,B0=H-34,ymin=-2,ymax=4;
+  var X=function(i){return a.length<=1?L0+(R0-L0)/2:L0+i/(a.length-1)*(R0-L0);};
+  var Y=function(v){return B0-(v-ymin)/(ymax-ymin)*(B0-T0);};
+  ctx.strokeStyle='#d9d2c6';ctx.lineWidth=1;ctx.font='10px sans-serif';ctx.fillStyle='#7a8893';
+  for(var i=0;i<a.length;i++){var px=X(i);ctx.beginPath();ctx.moveTo(px,T0);ctx.lineTo(px,B0);ctx.stroke();ctx.fillText(String(i+1),px-4,B0+13);}
+  for(var v=Math.ceil(ymin);v<=ymax;v++){var py=Y(v);ctx.beginPath();ctx.moveTo(L0,py);ctx.lineTo(R0,py);ctx.stroke();ctx.fillText(String(v),L0-20,py+3);}
+  ctx.strokeStyle='#5d6b74';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(L0,T0);ctx.lineTo(L0,B0);ctx.lineTo(R0,B0);ctx.stroke();
+  ctx.font='11px sans-serif';ctx.fillStyle='#5d6b74';ctx.fillText('局次',(L0+R0)/2-12,B0+28);
+  ctx.save();ctx.translate(L0-32,(T0+B0)/2);ctx.rotate(-Math.PI/2);ctx.fillText('d′ / c',0,0);ctx.restore();
+  // 零线
+  ctx.strokeStyle='#b0b8c4';ctx.setLineDash([4,3]);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L0,Y(0));ctx.lineTo(R0,Y(0));ctx.stroke();ctx.setLineDash([]);
+  // d′ 折线
+  ctx.strokeStyle='#e07a5f';ctx.lineWidth=2.2;ctx.beginPath();for(var i=0;i<a.length;i++){var p=X(i),q=Y(a[i].dp);i===0?ctx.moveTo(p,q):ctx.lineTo(p,q);}ctx.stroke();
+  for(var i=0;i<a.length;i++){ctx.fillStyle='#e07a5f';ctx.beginPath();ctx.arc(X(i),Y(a[i].dp),3.5,0,Math.PI*2);ctx.fill();}
+  // c 折线
+  ctx.strokeStyle='#0f4c5c';ctx.lineWidth=2.2;ctx.beginPath();for(var i=0;i<a.length;i++){var p=X(i),q=Y(a[i].c);i===0?ctx.moveTo(p,q):ctx.lineTo(p,q);}ctx.stroke();
+  for(var i=0;i<a.length;i++){ctx.fillStyle='#0f4c5c';ctx.beginPath();ctx.arc(X(i),Y(a[i].c),3.5,0,Math.PI*2);ctx.fill();}
+  // 图例
+  ctx.font='12px sans-serif';
+  ctx.fillStyle='#e07a5f';ctx.fillRect(R0-130,T0+4,14,3);ctx.fillText('d′（辨别力）',R0-110,T0+9);
+  ctx.fillStyle='#0f4c5c';ctx.fillRect(R0-130,T0+20,14,3);ctx.fillText('c（判断标准）',R0-110,T0+25);
+}
+function clearStim(){var W=gCanvas.width,H=gCanvas.height;gctx.fillStyle='#16242b';gctx.fillRect(0,0,W,H);
+  gctx.fillStyle='rgba(224,122,95,.9)';gctx.font='bold 26px sans-serif';gctx.textAlign='center';
+  gctx.fillText('⚠ 现在请判断',W/2,H/2);
+  gctx.font='15px sans-serif';gctx.fillStyle='rgba(255,255,255,.6)';
+  gctx.fillText(CLR[curGame]||'刚才是否出现信号？',W/2,H/2+34);gctx.textAlign='left';}
+
+/* ============================================================
+ * 场景绘制（原创 Canvas）
+ * ============================================================ */
+function drawProctor(sig){
+  var W=gCanvas.width,H=gCanvas.height,c=gctx;
+  c.fillStyle='#264742';c.fillRect(0,0,W,H-60);c.strokeStyle='#8a6f3c';c.lineWidth=6;c.strokeRect(3,3,W-6,H-66);
+  c.fillStyle='rgba(255,255,255,.88)';c.font='bold 22px serif';c.textAlign='center';c.fillText('期末考试  禁止作弊',W/2,57);
+  c.fillStyle='#c9b58f';c.fillRect(0,H-60,W,60);
+  var g=Math.max(0,Math.min(1,((sig?randN(G.dp,1):randN(0,1))+2)/4));
+  var dx=120,dy=250,dw=W-240,dh=110;
+  c.fillStyle='#a9743f';c.fillRect(dx,dy,dw,18);
+  c.fillStyle='#8f5f33';c.fillRect(dx+14,dy+18,16,dh-18);c.fillRect(dx+dw-30,dy+18,16,dh-18);
+  c.save();c.translate(dx+dw/2,dy+6);c.rotate(-0.05);c.fillStyle='#fff';c.fillRect(-80,-4,160,30);c.strokeStyle='#ccc';c.lineWidth=1;c.strokeRect(-80,-4,160,30);c.restore();
+  var cx=dx+dw/2;c.fillStyle='#4a6fa5';c.beginPath();c.ellipse(cx,dy-34,60,54,0,Math.PI,0);c.fill();
+  var tilt=(g-0.5)*0.5;c.save();c.translate(cx,dy-86);c.rotate(tilt*0.4);
+  c.fillStyle='#f2c9a0';c.beginPath();c.arc(0,0,32,0,Math.PI*2);c.fill();
+  c.fillStyle='#33383f';c.beginPath();c.arc(0,-8,32,Math.PI,0);c.fill();
+  var gl=g>0.3?(g-0.3)*18:0;
+  c.fillStyle='#fff';c.beginPath();c.ellipse(-11,2,7.5,5.5,0,0,Math.PI*2);c.fill();c.beginPath();c.ellipse(11,2,7.5,5.5,0,0,Math.PI*2);c.fill();
+  c.fillStyle='#222';c.beginPath();c.arc(-11+gl,2,3,0,Math.PI*2);c.fill();c.beginPath();c.arc(11+gl,2,3,0,Math.PI*2);c.fill();
+  c.strokeStyle='#b57a5a';c.lineWidth=2;c.beginPath();c.arc(0,12,7,0.15*Math.PI,0.85*Math.PI);c.stroke();c.restore();
+  if(g>0.4){var pa=Math.min(1,(g-0.4)/0.3)*0.9;c.save();c.globalAlpha=pa;c.translate(cx+34,dy-4);c.rotate(0.5);c.fillStyle='#fefefe';c.fillRect(-20,-7,40,14);c.strokeStyle='#bbb';c.lineWidth=1;c.strokeRect(-20,-7,40,14);c.restore();}
+  if(g>0.6){var ma=Math.min(1,(g-0.6)/0.3)*0.25;c.fillStyle='rgba(120,180,255,'+ma+')';c.beginPath();c.ellipse(cx,dy+6,46,13,0,0,Math.PI*2);c.fill();}
+  c.textAlign='left';c.fillStyle='rgba(255,255,255,.5)';c.font='13px monospace';c.fillText('EXAM · PROCTOR VIEW',20,24);
+}
+function drawCake(sig){
+  var W=gCanvas.width,H=gCanvas.height,c=gctx;
+  c.fillStyle='#efe6cf';c.fillRect(0,0,W,H);c.fillStyle='#3a2a1f';c.fillRect(0,0,W,70);
+  c.fillStyle='rgba(255,255,255,.5)';c.font='13px monospace';c.textAlign='left';c.fillText('BAKERY · QC VIEW',20,24);
+  c.fillStyle='#c9a97a';c.fillRect(0,H-70,W,70);c.fillStyle='#a8884f';c.fillRect(0,H-70,W,6);
+  var g=Math.max(0,Math.min(1,((sig?randN(G.dp,1):randN(0,1))+2)/4));
+  var cx=W/2,cy=H/2+10,R=110;
+  c.fillStyle='#f5f0e6';c.beginPath();c.ellipse(cx,cy+22,R+24,30,0,0,Math.PI*2);c.fill();c.strokeStyle='#d8cdb8';c.lineWidth=2;c.stroke();
+  var r=Math.round(225-g*70),gr=Math.round(190-g*60),b=Math.round(140-g*50);
+  c.fillStyle='rgb('+r+','+gr+','+b+')';var topRY=46-g*18;
+  c.beginPath();c.ellipse(cx,cy,R,topRY,0,0,Math.PI*2);c.fill();
+  c.fillStyle='rgb('+(r-20)+','+(gr-15)+','+(b-10)+')';c.fillRect(cx-R,cy,R*2,26);
+  c.fillStyle='rgb('+r+','+gr+','+b+')';c.beginPath();c.ellipse(cx,cy+26,R,8,0,0,Math.PI*2);c.fill();
+  c.fillStyle='rgba(255,250,240,'+(0.9-g*0.5)+')';
+  for(var i=0;i<8;i++){var a=i/8*Math.PI*2;c.beginPath();c.ellipse(cx+Math.cos(a)*R*0.7,cy+Math.sin(a)*topRY*0.7,10,7,0,0,Math.PI*2);c.fill();}
+  if(g>0.45){var ma=Math.min(1,(g-0.45)/0.4);c.fillStyle='rgba(70,90,40,'+ma+')';var n=Math.round(3+g*10);for(var i=0;i<n;i++){var a=Math.random()*Math.PI*2,rr=Math.random()*R*0.8;c.beginPath();c.arc(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr*0.6,2+Math.random()*3,0,Math.PI*2);c.fill();}}
+  if(g>0.6){var wa=Math.min(1,(g-0.6)/0.3)*0.6;c.strokeStyle='rgba(120,100,60,'+wa+')';c.lineWidth=2;for(var k=0;k<2;k++){c.beginPath();for(var x=cx-90;x<=cx+90;x+=4){var yy=cy-44-k*16+Math.sin(x*0.15)*6;x===cx-90?c.moveTo(x,yy):c.lineTo(x,yy);}c.stroke();}}
+  c.textAlign='left';
+}
+function drawCircuit(sig){
+  var W=gCanvas.width,H=gCanvas.height,c=gctx;
+  c.fillStyle='#1b2a36';c.fillRect(0,0,W,H);
+  c.fillStyle='rgba(255,255,255,.5)';c.font='13px monospace';c.textAlign='left';c.fillText('CABINET · INSPECTION VIEW',20,24);
+  c.strokeStyle='#3a4a5a';c.lineWidth=4;c.strokeRect(40,40,W-80,H-100);
+  var g=Math.max(0,Math.min(1,((sig?randN(G.dp,1):randN(0,1))+2)/4));
+  var bx=80,by=80,bw=W-160,bh=H-180;
+  c.fillStyle='#1f6b3a';c.fillRect(bx,by,bw,bh);
+  c.strokeStyle='rgba(180,150,40,0.5)';c.lineWidth=2;
+  for(var i=0;i<6;i++){var x1=bx+10+i*((bw-20)/6);c.beginPath();c.moveTo(x1,by+10);c.lineTo(x1,by+bh-10);c.stroke();}
+  c.strokeStyle='rgba(200,200,90,0.4)';c.lineWidth=1.5;
+  for(var j=0;j<5;j++){var y2=by+12+j*((bh-24)/5);c.beginPath();c.moveTo(bx+8,y2);c.lineTo(bx+bw-8,y2);c.stroke();}
+  var comps=[[bx+60,by+40],[bx+bw-120,by+40],[bx+60,by+bh-90],[bx+bw-120,by+bh-90],[bx+bw/2-30,by+bh/2-15]];
+  comps.forEach(function(p){c.fillStyle='#3a2a1a';c.fillRect(p[0],p[1],60,30);c.fillStyle='#555';c.fillRect(p[0]+4,p[1]+4,52,22);});
+  var ledR=Math.round(40+g*200),ledG=Math.round(200-g*180);
+  c.fillStyle='rgb('+ledR+','+ledG+',40)';c.shadowColor=c.fillStyle;c.shadowBlur=8+g*12;c.beginPath();c.arc(bx+bw-30,by+20,9,0,Math.PI*2);c.fill();c.shadowBlur=0;
+  if(g>0.4){var ca=Math.min(1,(g-0.4)/0.4);c.fillStyle='rgba(20,15,10,'+ca+')';c.beginPath();c.ellipse(bx+bw/2,by+bh/2,40+g*30,26+g*18,0,0,Math.PI*2);c.fill();}
+  if(g>0.55){var sa=Math.min(1,(g-0.55)/0.35);for(var k=0;k<3;k++){var sx=bx+bw/2-30+k*30;c.fillStyle='rgba(160,160,160,'+(sa*0.4)+')';c.beginPath();c.ellipse(sx,by,16,22,0,0,Math.PI*2);c.fill();c.beginPath();c.ellipse(sx+8,by-20,20,26,0,0,Math.PI*2);c.fill();}}
+  if(g>0.7){var fa=Math.min(1,(g-0.7)/0.25);c.fillStyle='rgba(255,220,120,'+fa+')';c.beginPath();c.arc(bx+bw/2,by+bh/2,6+Math.random()*4,0,Math.PI*2);c.fill();c.strokeStyle='rgba(255,240,180,'+fa+')';c.lineWidth=2;for(var a=0;a<6;a++){var ang=a/6*Math.PI*2;c.beginPath();c.moveTo(bx+bw/2,by+bh/2);c.lineTo(bx+bw/2+Math.cos(ang)*14,by+bh/2+Math.sin(ang)*14);c.stroke();}}
+  c.textAlign='left';
+}
+
+/* ============================================================
+ * 概念实验室（Canvas 自绘）
+ * ============================================================ */
+var L={dp:1.5,c:0,ps:0.5};
+var cDist,cRoc,cZRoc,cdctx,crctx,czctx;
+function initLab(){
+  cDist=document.getElementById('cDist');cdctx=cDist.getContext('2d');
+  cRoc=document.getElementById('cRoc');crctx=cRoc.getContext('2d');
+  cZRoc=document.getElementById('cZRoc');czctx=cZRoc.getContext('2d');
+  ['lDp','lC','lPs'].forEach(function(id){document.getElementById(id).oninput=readLab;});
+  readLab();
+}
+function readLab(){
+  L.dp=parseFloat(document.getElementById('lDp').value);
+  L.c=parseFloat(document.getElementById('lC').value);
+  L.ps=parseFloat(document.getElementById('lPs').value);
+  document.getElementById('lDpV').textContent=L.dp.toFixed(1);
+  document.getElementById('lCV').textContent=L.c.toFixed(2);
+  document.getElementById('lPsV').textContent=L.ps.toFixed(2);
+  var pH=1-ncdf(-L.c-L.dp), pFA=1-ncdf(-L.c);
+  var beta=gpdf(-L.c,L.dp,1)/gpdf(-L.c,0,1);
+  var acc=L.ps*pH+(1-L.ps)*(1-pFA);
+  document.getElementById('lmH').textContent=pH.toFixed(3);
+  document.getElementById('lmM').textContent=(1-pH).toFixed(3);
+  document.getElementById('lmFA').textContent=pFA.toFixed(3);
+  document.getElementById('lmCR').textContent=(1-pFA).toFixed(3);
+  document.getElementById('lMDP').textContent=L.dp.toFixed(2);
+  document.getElementById('lMC').textContent=L.c.toFixed(2);
+  document.getElementById('lMB').textContent=beta.toFixed(2);
+  document.getElementById('lMH').textContent=pH.toFixed(3);
+  document.getElementById('lMFA').textContent=pFA.toFixed(3);
+  document.getElementById('lMAcc').textContent=(acc*100).toFixed(1)+'%';
+  drawLabDist();drawLabROC();drawLabZROC();
+}
+// 公共：画坐标轴框架
+function drawAxes(c,L0,T0,R0,B0,xMin,xMax,xStep,yMin,yMax,yStep,xlabel,ylabel){
+  c.strokeStyle='#d9d2c6';c.lineWidth=1;
+  c.font='10px sans-serif';c.fillStyle='#7a8893';
+  // x 网格+刻度
+  for(var x=Math.ceil(xMin/xStep)*xStep;x<=xMax;x+=xStep){
+    var px=L0+(x-xMin)/(xMax-xMin)*(R0-L0);
+    c.beginPath();c.moveTo(px,T0);c.lineTo(px,B0);c.stroke();
+    c.fillText(String(Math.round(x)),px-6,B0+13);
+  }
+  for(var y=Math.ceil(yMin/yStep)*yStep;y<=yMax;y+=yStep){
+    var py=B0-(y-yMin)/(yMax-yMin)*(B0-T0);
+    c.beginPath();c.moveTo(L0,py);c.lineTo(R0,py);c.stroke();
+    c.fillText(String(Math.round(y)),L0-22,py+3);
+  }
+  // 轴
+  c.strokeStyle='#5d6b74';c.lineWidth=1.2;c.beginPath();c.moveTo(L0,T0);c.lineTo(L0,B0);c.lineTo(R0,B0);c.stroke();
+  // 轴标题
+  c.font='11px sans-serif';c.fillStyle='#5d6b74';
+  c.fillText(xlabel,(L0+R0)/2-xlabel.length*3,B0+26);
+  c.save();c.translate(L0-30,(T0+B0)/2);c.rotate(-Math.PI/2);c.fillText(ylabel,0,0);c.restore();
+}
+function drawLabDist(){
+  var W=cDist.width,H=cDist.height,c=cdctx;c.clearRect(0,0,W,H);
+  var xMin=-4,xMax=Math.max(4,L.dp+4),L0=44,R0=W-18,T0=22,B0=H-30;
+  var yMax=0.45;
+  var X=function(x){return L0+(x-xMin)/(xMax-xMin)*(R0-L0);};
+  var Y=function(y){return B0-y/yMax*(B0-T0);};
+  drawAxes(c,L0,T0,R0,B0,xMin,xMax,1,0,yMax,0.1,'感官证据','概率密度');
+  // 噪音曲线下填充
+  c.fillStyle='rgba(42,111,151,.13)';
+  c.beginPath();c.moveTo(X(xMin),Y(0));
+  for(var x=xMin;x<=xMax;x+=0.05)c.lineTo(X(x),Y(gpdf(x,0,1)));
+  c.lineTo(X(xMax),Y(0));c.closePath();c.fill();
+  // 信号曲线下填充
+  c.fillStyle='rgba(224,122,95,.13)';
+  c.beginPath();c.moveTo(X(xMin),Y(0));
+  for(var x=xMin;x<=xMax;x+=0.05)c.lineTo(X(x),Y(gpdf(x,L.dp,1)));
+  c.lineTo(X(xMax),Y(0));c.closePath();c.fill();
+  // 标准
+  var xc=-L.c;
+  c.strokeStyle='#16242b';c.setLineDash([5,4]);c.lineWidth=1.8;c.beginPath();c.moveTo(X(xc),T0);c.lineTo(X(xc),B0);c.stroke();c.setLineDash([]);
+  c.fillStyle='#16242b';c.font='11px sans-serif';c.fillText('标准 xc='+xc.toFixed(2),X(xc)+4,T0+12);
+  // 噪音曲线
+  c.strokeStyle='#2a6f97';c.lineWidth=2.2;c.beginPath();
+  for(var x=xMin;x<=xMax;x+=0.05){var y=gpdf(x,0,1);x===xMin?c.moveTo(X(x),Y(y)):c.lineTo(X(x),Y(y));}c.stroke();
+  // 信号曲线
+  c.strokeStyle='#e07a5f';c.beginPath();
+  for(var x=xMin;x<=xMax;x+=0.05){var y=gpdf(x,L.dp,1);x===xMin?c.moveTo(X(x),Y(y)):c.lineTo(X(x),Y(y));}c.stroke();
+  // 图例（右上）
+  var lx=R0-150,ly=T0+6;
+  c.font='11px sans-serif';
+  c.fillStyle='#2a6f97';c.fillRect(lx,ly,14,3);c.fillText('噪音 N(0,1)',lx+20,ly+4);
+  c.fillStyle='#e07a5f';c.fillRect(lx,ly+14,14,3);c.fillText('信号 N('+L.dp.toFixed(1)+',1)',lx+20,ly+18);
+}
+function drawLabROC(){
+  var W=cRoc.width,H=cRoc.height,c=crctx;c.clearRect(0,0,W,H);
+  var L0=40,R0=W-18,T0=22,B0=H-30,Sz=Math.min(R0-L0,B0-T0);
+  drawAxes(c,L0,T0,L0+Sz,B0,0,1,0.2,0,1,0.2,'虚警率 P(FA)','击中率 P(H)');
+  // 对角线
+  c.strokeStyle='#b0b8c4';c.setLineDash([5,4]);c.lineWidth=1.4;c.beginPath();c.moveTo(L0,B0);c.lineTo(L0+Sz,B0-Sz);c.stroke();c.setLineDash([]);
+  // 理论 ROC
+  c.strokeStyle='#e07a5f';c.lineWidth=2.5;c.beginPath();
+  var first=true;
+  for(var z=4;z>=-4;z-=0.02){var far=ncdf(-z),hr=ncdf(L.dp-z);var px=L0+far*Sz,py=B0-hr*Sz;first?(c.moveTo(px,py),first=false):c.lineTo(px,py);}c.stroke();
+  // 操作点
+  var pFA=1-ncdf(-L.c),pH=1-ncdf(-L.c-L.dp);
+  var px=L0+pFA*Sz,py=B0-pH*Sz;
+  c.fillStyle='#0f4c5c';c.beginPath();c.arc(px,py,6,0,Math.PI*2);c.fill();
+  c.strokeStyle='rgba(15,76,92,.3)';c.lineWidth=1;c.beginPath();c.arc(px,py,6,0,Math.PI*2);c.stroke();
+  // 图例
+  c.font='11px sans-serif';
+  c.fillStyle='#e07a5f';c.fillRect(L0+Sz-130,T0+6,14,3);c.fillText('理论 ROC（d′='+L.dp.toFixed(1)+'）',L0+Sz-110,T0+10);
+  c.fillStyle='#0f4c5c';c.beginPath();c.arc(L0+Sz-123,T0+22,4,0,Math.PI*2);c.fill();c.fillText('当前操作点 ('+pFA.toFixed(2)+', '+pH.toFixed(2)+')',L0+Sz-110,T0+26);
+}
+function drawLabZROC(){
+  var W=cZRoc.width,H=cZRoc.height,c=czctx;c.clearRect(0,0,W,H);
+  var xMin=-3,xMax=3,L0=44,R0=W-18,T0=22,B0=H-30,Sz=Math.min(R0-L0,B0-T0);
+  var X=function(z){return L0+(z-xMin)/(xMax-xMin)*Sz;};
+  var Y=function(z){return B0-(z-xMin)/(xMax-xMin)*Sz;};
+  drawAxes(c,L0,T0,R0,B0,xMin,xMax,1,xMin,xMax,1,'z(FA)','z(H)');
+  // 零轴
+  c.strokeStyle='#b0b8c4';c.setLineDash([4,3]);c.lineWidth=1;c.beginPath();c.moveTo(X(0),Y(xMin));c.lineTo(X(0),Y(xMax));c.moveTo(X(xMin),Y(0));c.lineTo(X(xMax),Y(0));c.stroke();c.setLineDash([]);
+  // 理论直线 z(H)=d'+z(FA)
+  c.strokeStyle='#e07a5f';c.lineWidth=2.5;c.beginPath();c.moveTo(X(xMin),Y(L.dp+xMin));c.lineTo(X(xMax),Y(L.dp+xMax));c.stroke();
+  // 操作点
+  var pH=1-ncdf(-L.c-L.dp),pFA=1-ncdf(-L.c);
+  var zH=invN(pH),zFA=invN(pFA);
+  c.fillStyle='#0f4c5c';c.beginPath();c.arc(X(zFA),Y(zH),6,0,Math.PI*2);c.fill();
+  c.strokeStyle='rgba(15,76,92,.3)';c.lineWidth=1;c.beginPath();c.arc(X(zFA),Y(zH),6,0,Math.PI*2);c.stroke();
+  // 图例
+  c.font='11px sans-serif';
+  c.fillStyle='#e07a5f';c.fillRect(X(xMax)-120,Y(xMax)+8,14,3);c.fillText('理论直线（截距=d′='+L.dp.toFixed(1)+'）',X(xMax)-100,Y(xMax)+12);
+  c.fillStyle='#0f4c5c';c.beginPath();c.arc(X(xMax)-113,Y(xMax)+24,4,0,Math.PI*2);c.fill();c.fillText('操作点 ('+zFA.toFixed(2)+', '+zH.toFixed(2)+')',X(xMax)-100,Y(xMax)+28);
+}
+initLab();
+document.getElementById('clearHist').onclick=clearHist;
+renderHist();
+go('home');
+</script>
+</body>
+</html>
