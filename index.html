@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>注意实验室·看见与看不见</title>
+<!-- 自托管的 WebGazer 眼动库（与 index.html 同目录）。不需要眼动时可忽略此文件。 -->
+<script src="webgazer.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif; background:#f4f2ec; color:#26241f; line-height:1.65; }
+  .wrap { max-width:880px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:27px; margin:6px 0 2px; }
+  h2 { font-size:20px; margin:0 0 8px; }
+  h3 { font-size:16px; margin:16px 0 4px; }
+  p { margin:8px 0; }
+  .center { text-align:center; }
+  .muted { color:#777; font-size:13px; }
+  .card { background:#fff; border:1px solid #e0dccf; border-radius:10px; padding:22px 28px; margin-top:14px; box-shadow:0 1px 3px rgba(60,50,20,.07); }
+  .cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  .tile { background:#fff; border:1px solid #e0dccf; border-radius:10px; width:260px; padding:18px 18px 16px; box-shadow:0 1px 3px rgba(60,50,20,.07); display:flex; flex-direction:column; }
+  .tile h3 { margin-top:0; }
+  .tile .desc { font-size:13px; color:#555; flex:1; }
+  .tile .act { margin-top:12px; text-align:center; }
+  .badge { display:inline-block; font-size:12px; color:#1c7a3a; border:1px solid #1c7a3a; border-radius:20px; padding:1px 10px; }
+  button { font:inherit; background:#2b4a8b; color:#fff; border:none; border-radius:6px; padding:9px 22px; cursor:pointer; margin:2px; }
+  button:hover { background:#3a5ca8; }
+  button.ghost { background:#fff; color:#2b4a8b; border:1px solid #2b4a8b; }
+  button:disabled { background:#b8b4a8; color:#fff; cursor:not-allowed; }
+  input[type=text], input[type=number] { font:inherit; padding:7px 10px; border:1px solid #bbb; border-radius:6px; width:130px; }
+  label { display:inline-flex; align-items:center; gap:6px; }
+  table { border-collapse:collapse; margin:10px auto; font-size:14px; }
+  th, td { border:1px solid #d8d3c4; padding:6px 12px; text-align:center; }
+  th { background:#f0ede3; }
+  .hint { text-align:center; color:#555; font-size:15px; min-height:22px; margin:8px 0 2px; }
+  .footer { text-align:center; color:#9a9484; font-size:13px; padding:26px 0 4px; letter-spacing:1px; }
+  .ok { color:#1c7a3a; } .bad { color:#b03030; }
+
+  /* 实验一 */
+  #arena { width:720px; height:420px; margin:10px auto; background:#fbfaf6; border:1px solid #cfcabb; border-radius:6px; position:relative; overflow:hidden; }
+  .sq { position:absolute; width:20px; height:20px; border-radius:4px; left:0; top:0; }
+  .sq.blue { background:#2b62c4; }
+  .sq.gray { background:#b9b6ad; }
+  .sq.flash { background:#ffd94d; box-shadow:0 0 0 3px #f0b400; }
+  .count-btns button { width:54px; font-size:17px; }
+
+  /* 实验二 */
+  .stim { height:150px; display:flex; align-items:center; justify-content:center; font-size:78px; font-weight:700; }
+  .km { display:inline-block; margin:3px 6px; padding:3px 10px; border:1px solid #ccc; border-radius:5px; background:#faf9f5; font-size:14px; }
+
+  /* 实验三 */
+  .prop-stage { display:flex; align-items:flex-end; justify-content:center; gap:40px; margin:16px 0; }
+  .prop-bar { position:relative; width:130px; height:360px; border:2px solid #3a382f; background:#fff; }
+  .prop-fill { position:absolute; left:0; right:0; bottom:0; background:#a8a196; }
+  .tick { position:absolute; left:100%; height:0; border-top:1px solid #3a382f; width:12px; }
+  .tick span { position:absolute; left:16px; top:-9px; font-size:12px; color:#555; white-space:nowrap; }
+  .scale-tag { text-align:center; font-size:13px; color:#555; }
+
+  /* 眼动校准 */
+  #calibWrap { position:relative; width:720px; height:420px; margin:10px auto; background:#fbfaf6; border:1px solid #cfcabb; border-radius:6px; }
+  .cdot { position:absolute; width:22px; height:22px; border-radius:50%; background:#c9a227; transform:translate(-50%,-50%); cursor:pointer; box-shadow:0 0 0 2px #fff; font-size:11px; color:#fff; text-align:center; line-height:22px; }
+  svg.chart { display:block; margin:8px auto; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+"use strict";
+
+// ====== 收数配置 ======
+const PROJECT = "RBE9XY"; // 六位项目码（已在注意实验室 /hw2 页面创建项目）
+const LAB = "https://attention-lab-production.up.railway.app";
+const SUBMIT_URL = LAB + "/api/hw2/submit";
+const DATA_URL = LAB + "/api/hw2/data";
+const EXP = { ib: "inattentional_blindness", stroop: "stroop_expectancy", prop: "proportion_scale" };
+
+const app = document.getElementById("app");
+const $ = function(id){ return document.getElementById(id); };
+function setScreen(html){ app.innerHTML = '<div class="wrap">' + html + '<div class="footer">工程心理学 · 作业二</div></div>'; window.scrollTo(0,0); }
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function mean(a){ if(!a.length) return NaN; let s=0; for(const x of a) s+=x; return s/a.length; }
+
+// ====== 全局状态 ======
+const S = {
+  pid: "",
+  eye: { enabled:false, calibrated:false },
+  ib: { cond:"", rows:[], gaze:[], gazeSummary:null, done:false, eyeUsed:false },
+  stroop: { order:"", rows:[], done:false },
+  prop: { rows:[], done:false },
+  upload: { ib:"", stroop:"", prop:"" },
+};
+
+// ====== 收数 ======
+async function submitData(key, experiment, condition, trials){
+  const code = (PROJECT||"").trim().toUpperCase();
+  if(!/^[A-Z0-9]{6}$/.test(code)){ S.upload[key]="未配置有效项目码，未上传（请在 index.html 顶部修改 PROJECT）"; return; }
+  try{
+    const res = await fetch(SUBMIT_URL, { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ project:code, experiment:experiment, participant:S.pid, condition:condition||"", trials:trials,
+        meta:{ ua:navigator.userAgent.slice(0,80), w:innerWidth, h:innerHeight } }) });
+    const r = await res.json();
+    if(!r.ok){ S.upload[key]="上传失败："+(r.msg||("HTTP "+res.status)); return; }
+    let msg="已上传（"+new Date().toLocaleTimeString()+"，本实验累计 "+(r.records!=null?r.records:trials.length)+" 条）";
+    if(r.warnings){ msg+="；有字段警告："+r.warnings; console.warn("上传警告",r.warnings,r.warning_details); }
+    S.upload[key]=msg;
+  }catch(e){ S.upload[key]="上传失败（网络错误），可用 CSV 备份"; }
+}
+async function loadAll(experiment){
+  const code=(PROJECT||"").trim().toUpperCase();
+  if(!/^[A-Z0-9]{6}$/.test(code)) return [];
+  try{
+    const r = await (await fetch(DATA_URL+"?project="+code+"&experiment="+experiment)).json();
+    return r.records||[];
+  }catch(e){ return []; }
+}
+function downloadCSV(scope){
+  const all = scope==="ib"?S.ib.rows : scope==="stroop"?S.stroop.rows : scope==="prop"?S.prop.rows : [].concat(S.ib.rows,S.stroop.rows,S.prop.rows);
+  const cols=["exp","participant","cond","trial","type","rt","correct","block","word","ink","key","p_true","p_est","bias","count_resp","count_correct","report","shape","noticed"];
+  const esc=function(v){ v=(v===undefined||v===null)?"":String(v); return /[",\n]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; };
+  let csv=cols.join(",")+"\n";
+  for(const r of all){ const o=Object.assign({participant:S.pid},r); csv+=cols.map(function(c){ return esc(o[c]); }).join(",")+"\n"; }
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="attention_lab_"+(S.pid||"data")+"_"+(scope||"all")+".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ====== 小图：SVG ======
+function svgAxis(W,H,x0,x1,y0,y1){
+  const m={l:48,r:14,t:14,b:34}; const w=W-m.l-m.r, h=H-m.t-m.b;
+  return { m:m, w:w, h:h, px:function(x){ return m.l + (x-x0)/(x1-x0)*w; },
+    py:function(y){ return m.t + (1-(y-y0)/(y1-y0))*h; } };
+}
+function barChart(rows, W, H, maxV){
+  const ax=svgAxis(W,H,0,rows.length,-maxV,maxV); let s='<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-width:'+W+'px">';
+  s+='<line x1="'+ax.m.l+'" y1="'+ax.py(0)+'" x2="'+(W-ax.m.r)+'" y2="'+ax.py(0)+'" stroke="#bbb"/>';
+  const bw=ax.w/rows.length*0.30;
+  rows.forEach(function(r,i){
+    const cx=ax.px(i+0.5);
+    s+=drawRect(cx-bw-1, ax.py(r.a), bw*2, ax.py(0)-ax.py(r.a), '#7fa6d8');
+    s+=drawRect(cx+bw+1, ax.py(r.b), bw*2, ax.py(0)-ax.py(r.b), '#d8a44a');
+    s+='<text x="'+cx+'" y="'+(H-ax.m.b+18)+'" text-anchor="middle" font-size="12" fill="#555">'+r.label+'</text>';
+  });
+  s+='</svg>'; return s;
+  function drawRect(x,y,w,h,fill){ if(h<0){y=y+h;h=-h;} if(w<0){x=x+w;w=-w;} return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="'+fill+'" opacity="0.85"/>'; }
+}
+function biasChart(curvePts, ownPts, groupPts, W, H){
+  // y 范围 ±0.35，既能容纳预测曲线（幅值 0.15），也能容纳个别偏差较大的散点，不被裁切
+  const ax=svgAxis(W,H,0,1,-0.35,0.35); let s='<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-width:'+W+'px">';
+  s+='<line x1="'+ax.m.l+'" y1="'+ax.py(0)+'" x2="'+(W-ax.m.r)+'" y2="'+ax.py(0)+'" stroke="#bbb"/>';
+  [0.25,0.5,0.75].forEach(function(p){ s+='<line x1="'+ax.px(p)+'" y1="'+ax.m.t+'" x2="'+ax.px(p)+'" y2="'+(H-ax.m.b)+'" stroke="#eee"/>'; });
+  let d=""; curvePts.forEach(function(pt,i){ d+=(i?"L":"M")+ax.px(pt[0]).toFixed(1)+" "+ax.py(pt[1]).toFixed(1)+" "; });
+  s+='<path d="'+d+'" fill="none" stroke="#2b4a8b" stroke-width="2" stroke-dasharray="5 4"/>';
+  groupPts.forEach(function(pt){ s+='<rect x="'+(ax.px(pt[0])-4)+'" y="'+(ax.py(pt[1])-4)+'" width="8" height="8" fill="#d8a44a" opacity="0.85"/>'; });
+  ownPts.forEach(function(pt){ s+='<circle cx="'+ax.px(pt[0]).toFixed(1)+'" cy="'+ax.py(pt[1]).toFixed(1)+'" r="4" fill="#b03030"/>'; });
+  s+='<text x="'+ax.px(0)+'" y="'+(H-ax.m.b+18)+'" font-size="11" fill="#888">0</text>';
+  s+='<text x="'+(W-ax.m.r)+'" y="'+(H-ax.m.b+18)+'" font-size="11" fill="#888" text-anchor="end">1.0</text>';
+  s+='<text x="14" y="'+(ax.m.t+4)+'" font-size="11" fill="#888">高估</text>';
+  s+='<text x="14" y="'+(H-ax.m.b)+'" font-size="11" fill="#888">低估</text>';
+  s+='</svg>'; return s;
+}
+
+// ============================================================
+//  第一页：知情同意 + 代号 + 进入
+// ============================================================
+function screenConsent(){
+  setScreen(
+    '<h1 class="center">👁 注意实验室 · 看见与看不见</h1>' +
+    '<p class="center muted">工程心理学 · 作业二</p>' +
+    '<div class="card">' +
+      '<h2>📋 参加说明</h2>' +
+      '<ul>' +
+        '<li>本页用于课程教学，全程匿名，请用一个昵称或编号（如 P01）作为代号，不要填真实姓名、学号。</li>' +
+        '<li>任务没有对错好坏之分，按真实感受作答即可；可随时关闭页面退出。</li>' +
+        '<li>数据匿名上传到课程统一后台，仅用于教学与集体分析。</li>' +
+        '<li>建议在电脑上用 Chrome 或 Edge 全屏安静地完成。</li>' +
+      '</ul>' +
+      '<p><label><input type="checkbox" id="agree"> 我已阅读并同意参加</label></p>' +
+      '<p>你的代号 <input type="text" id="pid" placeholder="例如 P01" maxlength="12"></p>' +
+      '<p class="center"><button id="go" disabled>进入实验 →</button></p>' +
+    '</div>'
+  );
+  const agree=$("agree"), pid=$("pid"), go=$("go");
+  function refresh(){ go.disabled = !(agree.checked && pid.value.trim().length>0); }
+  agree.addEventListener("change",refresh);
+  pid.addEventListener("input",refresh);
+  go.addEventListener("click",function(){ S.pid=pid.value.trim(); screenOverview(); });
+  refresh();
+}
+
+// ============================================================
+//  第二页：知识 + 概念实验室 + 三个游戏选择
+// ============================================================
+function screenOverview(){
+  const ibOn=S.ib.done, stOn=S.stroop.done, prOn=S.prop.done;
+  setScreen(
+    '<p class="muted"><a id="back" href="javascript:void(0)">← 返回上一页</a></p>' +
+    '<h2 class="center">🧠 先了解一点点</h2>' +
+    '<div class="card">' +
+      '<p>“注意”不是一台全程录像的摄像机——它会挑选、会聚焦，也会漏掉就在眼前的东西。这个实验室里你会体验三种和注意有关的现象：</p>' +
+      '<p>👁 <b>非注意盲</b>：当你专心盯着一件事（比如数数）时，别的东西从眼前经过，你也可能完全没看见。</p>' +
+      '<p>🎨 <b>Stroop 干扰</b>：一个字的“意思”会和你想判断的“颜色”打架，读得多的人尤其躲不开。</p>' +
+      '<p>📐 <b>比例估计</b>：用不同的刻度去读同一张图，你的估计会系统性地偏——你以为看到的，其实被刻度骗了。</p>' +
+      '<p class="muted">每个实验做完，都会把<b>你的结果</b>和<b>全班</b>的匿名数据放在一起比较。</p>' +
+    '</div>' +
+    '<div class="card">' +
+      '<h2>🔬 概念实验室 · 结果怎么看</h2>' +
+      '<p>做完实验会出现一些数字和图，这里先说明它们都代表什么：</p>' +
+      '<ul>' +
+        '<li><b>觉察率</b>：报告“看到意外物体”的人数 ÷ 总人数。觉察率越低，说明非注意盲越强。</li>' +
+        '<li><b>一致性效应</b>：不一致试次的反应时 − 一致试次的反应时（毫秒）。数字越大，字义对颜色的干扰越强。</li>' +
+        '<li><b>偏差 / SSTS</b>：偏差＝你的估计 − 真实值（正为高估、负为低估）。SSTS 模型预测偏差随比例呈循环起伏，刻度不同循环频率也不同。</li>' +
+        '<li><b>SEEV / 注视</b>：用显著性和自上而下预期预测“你会看哪里”。如果你<b>注视到了却没觉察</b>到意外物，那正是非注意盲的直接证据。</li>' +
+      '</ul>' +
+    '</div>' +
+    '<p class="center" style="font-size:15px;color:#7a6a3a;margin:6px 0 2px">理论就到这——下面轮到你来当被试，看看你的注意会不会“被骗”。</p>' +
+    '<h2 class="center" style="margin-top:18px">🎮 选一个实验开始</h2>' +
+    '<div class="cards">' +
+      tile("实验一","👁 非注意盲","盯住移动的蓝方块数亮起次数，过程中可能出现别的东西——你会注意到吗？",ibOn,"enterIB") +
+      tile("实验二","🎨 Stroop 字色判断","汉字被涂成某种颜色，只判断颜色不管字义，看字义会不会干扰你。",stOn,"enterStroop") +
+      tile("实验三","📐 比例估计","柱子上有一段阴影，估计它占整根柱子的百分比，不同刻度下你准不准。",prOn,"enterProp") +
+    '</div>'
+  );
+  $("back").addEventListener("click",function(){ screenConsent(); });
+  $("enterIB").addEventListener("click",enterIB);
+  $("enterStroop").addEventListener("click",enterStroop);
+  $("enterProp").addEventListener("click",enterProp);
+}
+function tile(num,title,desc,done,id){
+  return '<div class="tile"><h3>'+num+' · '+title+'</h3><div class="desc">'+desc+(done?' <span class="badge">✓ 已完成</span>':'')+'</div>'+
+    '<div class="act"><button id="'+id+'">进入实验</button></div></div>';
+}
+function requirePid(){ return S.pid && S.pid.length>0; }
+
+// 每个实验结束后的统一结束页：感谢 + 上传状态 + 查看结果分析
+function screenExpEnd(num, upKey, onView){
+  setScreen(
+    '<div class="card center">' +
+      '<h1>✅ '+num+' 结束</h1>' +
+      '<p>感谢参与！这一部分到这里就完成了。</p>' +
+      '<p class="muted" id="up">上传状态：处理中…</p>' +
+      '<p class="center"><button id="viewRes">查看结果分析</button></p>' +
+      '<p class="muted"><a id="back3" href="javascript:void(0)">← 先不看了，返回实验选择</a></p>' +
+    '</div>'
+  );
+  pollUpload("up", upKey);
+  $("viewRes").addEventListener("click", onView);
+  $("back3").addEventListener("click", function(){ screenOverview(); });
+}
+
+// ============================================================
+//  WebGazer
+// ============================================================
+function wgAvailable(){ return typeof window.webgazer!=="undefined" && window.webgazer!==null; }
+function wgStop(){ if(!wgAvailable()) return; try{ window.webgazer.end(); }catch(e){} }
+function wgCalibrate(onDone){
+  if(!wgAvailable()){ onDone(false); return; }
+  const pts=[[15,15],[50,15],[85,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+  let counts=pts.map(function(){return 0;});
+  setScreen(
+    '<div class="card center"><h2>摄像头眼动校准</h2>' +
+      '<p>已启用自托管 WebGazer。请保持头部正对摄像头，然后<b>依次盯着每个黄点并点击它 5 次</b>（共 9 个点）。</p>' +
+      '<p class="muted">校准越认真，注视记录越准；不想做可点“跳过眼动”，实验照常进行（仅不记录注视）。</p></div>' +
+    '<div id="calibWrap">' + pts.map(function(p,i){ return '<div class="cdot" data-i="'+i+'" style="left:'+p[0]+'%;top:'+p[1]+'%">0</div>'; }).join("") + '</div>' +
+    '<p class="center" id="cprog">进度：0 / 45</p>' +
+    '<p class="center"><button id="cdone" disabled>完成校准</button> <button class="ghost" id="cskip">跳过眼动</button></p>'
+  );
+  let started=false;
+  function start(){ if(started) return; started=true;
+    try{
+      window.webgazer.setRegression("ridge");
+      try { window.webgazer.setTracker("clmtrackr"); } catch(e){} // 不支持则用默认追踪器
+      window.webgazer.begin();
+      try { window.webgazer.showPredictionPoints(false); } catch(e){}
+    }
+    catch(e){ $("cprog").textContent="WebGazer 启动失败，已跳过眼动："+e.message; setTimeout(function(){ wgStop(); onDone(false); },1200); }
+  }
+  start();
+  let total=0;
+  document.querySelectorAll(".cdot").forEach(function(d){
+    d.addEventListener("click",function(){
+      const i=Number(d.getAttribute("data-i")); if(counts[i]>=5) return;
+      counts[i]++; total++; d.textContent=counts[i]; d.style.opacity=0.4+0.12*counts[i];
+      $("cprog").textContent="进度："+total+" / 45";
+      if(total>=45){ $("cdone").disabled=false; }
+    });
+  });
+  $("cdone").addEventListener("click",function(){ try{ window.webgazer.showVideo(false); }catch(e){} S.eye.calibrated=true; onDone(true); });
+  $("cskip").addEventListener("click",function(){ wgStop(); S.eye.calibrated=false; onDone(false); });
+}
+function wgSample(arena, store, t){
+  if(!S.eye.enabled || !S.eye.calibrated || !wgAvailable()) return;
+  const p=window.webgazer.getCurrentPrediction && window.webgazer.getCurrentPrediction();
+  if(!p || p.x==null) return;
+  const r=arena.getBoundingClientRect();
+  store.push({ t:t, x:p.x-r.left, y:p.y-r.top });
+}
+
+// ============================================================
+//  实验一：非注意盲
+// ============================================================
+function enterIB(){
+  if(!requirePid()) return;
+  S.ib.cond = Math.random()<0.5 ? "same_color" : "diff_color";
+  screenIBChoice();
+}
+// 眼动授权选择：放在实验一内部，其它实验无需授权
+function screenIBChoice(){
+  const wg=wgAvailable();
+  setScreen(
+    '<div class="card center">' +
+      '<h2>👁 实验一 · 非注意盲</h2>' +
+      '<p>这个实验可以选择是否记录你的<b>眼动（注视位置）</b>。开启眼动，结束后能看到“你看向了哪里、却有没有看见”的对比；不开也完全没问题，实验照常进行。</p>' +
+      '<p class="center"><button id="cam">📷 授权摄像头并开始</button></p>' +
+      '<p class="muted">'+(wg?'授权摄像头后需做一次约 1 分钟的 9 点校准。':'未找到 webgazer.min.js，无法记录眼动，建议选“直接体验”。')+'</p>' +
+      '<p class="center"><button class="ghost" id="nocam">直接体验（不记录注视）</button></p>' +
+      '<p class="muted"><a id="back2" href="javascript:void(0)">← 返回实验选择</a></p>' +
+    '</div>'
+  );
+  $("cam").addEventListener("click",function(){
+    if(!wg){ S.eye.enabled=false; S.eye.calibrated=false; S.ib.eyeUsed=false; screenIBIntro(); return; }
+    S.eye.enabled=true; S.eye.calibrated=false; S.ib.eyeUsed=true;
+    wgCalibrate(function(ok){ if(!ok){ S.eye.enabled=false; } screenIBIntro(); });
+  });
+  $("nocam").addEventListener("click",function(){ S.eye.enabled=false; S.eye.calibrated=false; S.ib.eyeUsed=false; screenIBIntro(); });
+  $("back2").addEventListener("click",function(){ screenOverview(); });
+}
+function screenIBIntro(){
+  setScreen(
+    '<div class="card">' +
+      '<h2>👁 实验一 · 数一数亮了几次</h2>' +
+      '<p>屏幕上会有<b>蓝色</b>和<b>灰色</b>两种小方块在不停移动、弹跳。</p>' +
+      '<p>你的任务<b>只盯住蓝色方块</b>：每当某个蓝色方块突然“亮一下”（变成金黄色），就在心里记一次。每段结束后报告蓝色方块一共亮了几次。</p>' +
+      '<p>灰方块不用管，但要正常出现在画面里，请尽量不看它们。</p>' +
+      '<p>先做 3 次练习熟悉节奏，再做 20 段正式。</p>' +
+      (S.eye.enabled && S.eye.calibrated ? '<p class="muted">眼动已开启：本实验会记录你的注视位置。</p>' : '') +
+      '<p class="muted">（改编自 Simons &amp; Chabris, 1999 的非注意盲范式）</p>' +
+      '<p class="center"><button id="go">开始练习</button></p>' +
+    '</div>'
+  );
+  $("go").addEventListener("click",function(){ ibRun("practice",0); });
+}
+// 正式试次调度：20 段，其中一段为关键段（出现十字），随机插在中间，不放在最前 3 段和最后 3 段
+const IB_N_FORMAL = 20;
+let IB_SCHED = [];
+function ibStartFormal(){
+  const sched = new Array(IB_N_FORMAL).fill("count");
+  const ci = 3 + Math.floor(Math.random() * (IB_N_FORMAL - 6)); // 0-based，落在 [3, N-4]，避开首尾各 3 段
+  sched[ci] = "critical";
+  S.ib.criticalTrialIdx = ci + 1;
+  IB_SCHED = sched;
+  ibRun(sched[0], 1);
+}
+// 随机生成 n 个不重复的闪光时刻（毫秒）
+function genFlashTimes(dur, n){
+  const times = []; const lo = 2000, hi = dur - 1500;
+  while (times.length < n){ const t = lo + Math.floor(Math.random() * (hi - lo)); if (times.indexOf(t) < 0) times.push(t); }
+  times.sort(function(a,b){ return a - b; });
+  return times;
+}
+function ibRun(kind, idx){
+  const dur = kind==="practice" ? 8000 : (kind==="critical" ? 14000 : 11000);
+  // 每段闪光次数随机：练习 1–3 次，正式 1–4 次（关键段也照常随机，计数任务不受影响）
+  const nFlash = kind==="practice" ? (1 + Math.floor(Math.random()*3)) : (1 + Math.floor(Math.random()*4));
+  const flashTimes = genFlashTimes(dur, nFlash);
+  setScreen('<p class="hint">'+(kind==="practice"?"练习：数蓝方块亮了几次":"请数蓝方块亮了几次")+'</p><div id="arena"></div>');
+  const arena=$("arena");
+  const AW=720, AH=420, SZ=20;
+  const sqs=[];
+  for(let i=0;i<12;i++){
+    const el=document.createElement("div"); el.className="sq "+(i<6?"blue":"gray"); arena.appendChild(el);
+    sqs.push({ el:el, x:rand(8,AW-SZ-8), y:rand(8,AH-SZ-8), vx:rand(60,120)*(Math.random()<.5?-1:1), vy:rand(60,120)*(Math.random()<.5?-1:1), flashUntil:0, blue:i<6 });
+  }
+  // 改进：意外物颜色。same_color 与注意集（蓝）同色；diff_color 用低饱和暗橄榄色，不显眼。
+  const crossColor = S.ib.cond==="same_color" ? "#2b62c4" : "#9a8c52";
+  let crossEl=null, crossX=-64, crossY=0, crossOn=false;
+  const gaze = (kind==="critical" && S.eye.enabled && S.eye.calibrated) ? [] : null;
+  const t0=performance.now(); let last=t0, done=false, raf=0, lastSample=0;
+  function step(now){
+    if(done) return;
+    const dt=(now-last)/1000; last=now; const t=now-t0;
+    while(flashTimes.length && t>=flashTimes[0]){ flashTimes.shift(); const blues=sqs.filter(function(s){return s.blue;}); const s=pick(blues); s.flashUntil=now+420; }
+    for(const s of sqs){
+      s.x+=s.vx*dt; s.y+=s.vy*dt;
+      if(s.x<=0){s.x=0;s.vx=-s.vx;} if(s.x>=AW-SZ){s.x=AW-SZ;s.vx=-s.vx;}
+      if(s.y<=0){s.y=0;s.vy=-s.vy;} if(s.y>=AH-SZ){s.y=AH-SZ;s.vy=-s.vy;}
+      s.el.style.transform="translate("+s.x+"px,"+s.y+"px)";
+      s.el.classList.toggle("flash", now<s.flashUntil);
+    }
+    if(kind==="critical" && !crossOn && t>=3500){
+      crossOn=true; crossY=rand(70,AH-130);
+      crossEl=document.createElement("div");
+      crossEl.style.cssText="position:absolute;width:56px;height:56px;left:0;top:0;z-index:5;will-change:transform;";
+      crossEl.innerHTML='<div style="position:absolute;left:0;top:22px;width:56px;height:12px;border-radius:6px;background:'+crossColor+'"></div>'+
+        '<div style="position:absolute;left:22px;top:0;width:12px;height:56px;border-radius:6px;background:'+crossColor+'"></div>';
+      arena.appendChild(crossEl);
+    }
+    if(crossOn){ crossX+=170*dt; crossEl.style.transform="translate("+crossX+"px,"+crossY+"px)"; }
+    if(gaze){ if(now-lastSample>90){ lastSample=now; wgSample(arena, gaze, t); } }
+    if(t>=dur){ done=true; cancelAnimationFrame(raf); ibCountQuestion(kind, idx, nFlash, gaze, crossY); return; }
+    raf=requestAnimationFrame(step);
+  }
+  raf=requestAnimationFrame(step);
+}
+function ibCountQuestion(kind, idx, nFlash, gaze, crossY){
+  const trueFlash=nFlash;
+  setScreen('<div class="card center"><h2>蓝色方块一共亮了几次？</h2><div class="count-btns">'+[0,1,2,3,4,5].map(function(n){return '<button data-n="'+n+'">'+n+'</button>';}).join("")+'</div><p class="muted" id="fb"></p></div>');
+  const fb=$("fb");
+  document.querySelectorAll(".count-btns button").forEach(function(b){
+    b.addEventListener("click",function(){
+      const n=Number(b.getAttribute("data-n")); const correct=n===trueFlash?1:0;
+      if(kind==="practice"){
+        fb.innerHTML=(correct?"对的，是 ":"其实是 ")+trueFlash+" 次。"+(idx<2?"继续练习。":"练习结束，下面正式开始。");
+        setTimeout(function(){ if(idx<2){ ibRun("practice",idx+1); } else { ibStartFormal(); } },1100);
+        return;
+      }
+      // 正式：记录本段计数；关键段额外保存注视与十字位置，但不在此时提问，避免提示
+      const row={ exp:"ib", cond:S.ib.cond, trial:idx, type:kind, rt:"", correct:correct, count_resp:n, count_correct:correct, report:"", shape:"", noticed:"" };
+      S.ib.rows.push(row);
+      if(kind==="critical"){ S.ib.gaze = gaze||[]; S.ib.critCrossY = crossY; }
+      if(idx < IB_N_FORMAL){ ibRun(IB_SCHED[idx], idx+1); }   // IB_SCHED[idx] 为下一段（0-based = idx）
+      else { ibAware(); }
+    });
+  });
+}
+// 所有正式段结束后再统一询问觉察，避免在关键段当场提示被试
+function ibAware(){
+  setScreen('<div class="card center"><h2>还有几个问题</h2><p>回想刚才<b>整个</b>过程，除了移动的蓝色和灰色方块之外，<b>你是否看到有别的物体出现过</b>（不是蓝方块也不是灰方块）？</p><p class="center"><button id="yes">看到了</button> <button id="no">没看到</button></p></div>');
+  $("yes").addEventListener("click",function(){ ibShape(); });
+  $("no").addEventListener("click",function(){ ibFinish(false,"no",""); });
+}
+function ibShape(){
+  setScreen('<div class="card center"><h2>它是什么形状？</h2><p>凭印象选一个，看不清也可以选“没看清”。</p><p class="center"><button data-s="cross">十字形</button><button data-s="circle">圆形</button><button data-s="triangle">三角形</button><button data-s="unclear">没看清</button></p></div>');
+  document.querySelectorAll("[data-s]").forEach(function(b){
+    b.addEventListener("click",function(){ const s=b.getAttribute("data-s"); ibFinish(s==="cross","yes",s); });
+  });
+}
+function ibFinish(noticed, report, shape){
+  // 把觉察结果回填到关键段那一行
+  const cr = S.ib.rows.filter(function(r){return r.type==="critical";})[0];
+  if(cr){ cr.report=report; cr.shape=shape; cr.noticed=noticed?1:0; }
+  S.ib.gazeSummary = (S.ib.gaze && S.ib.gaze.length) ? ibGazeSummary(S.ib.gaze, S.ib.critCrossY) : null;
+  S.ib.done=true;
+  submitData("ib", EXP.ib, S.ib.cond, S.ib.rows);
+  screenExpEnd("👁 实验一","ib",ibResult);
+}
+function ibGazeSummary(gaze, crossY){
+  const cy = (crossY==null) ? 210 : crossY;
+  let nearCross=0, total=0;
+  const crossPeriod=gaze.filter(function(g){return g.t>=3500 && g.t<=8500;});
+  for(const g of crossPeriod){ total++; const cx=-64+170*((g.t-3500)/1000); if(Math.abs(g.x-(cx+28))<90 && Math.abs(g.y-(cy+28))<90) nearCross++; }
+  const zones={top:0,mid:0,bot:0};
+  for(const g of gaze){ if(g.y<140) zones.top++; else if(g.y<280) zones.mid++; else zones.bot++; }
+  const tot=gaze.length||1;
+  return { fixatedCross:nearCross>0, nearCrossRatio:total?nearCross/total:0, zones:{top:zones.top/tot,mid:zones.mid/tot,bot:zones.bot/tot}, n:gaze.length, crossY:cy };
+}
+// 眼动回放：在 canvas 上按原始时间重放注视轨迹与意外物
+function ibReplayBind(){
+  const cv=$("rp"); if(!cv) return;
+  const ctx=cv.getContext("2d");
+  const gaze=S.ib.gaze||[];
+  const crossY=(S.ib.gazeSummary&&S.ib.gazeSummary.crossY!=null)?S.ib.gazeSummary.crossY:210;
+  const color=S.ib.cond==="same_color"?"#2b62c4":"#9a8c52";
+  const dur=14000;
+  function drawCross(x,y){ ctx.save(); ctx.translate(x+28,y+28); ctx.fillStyle=color; ctx.fillRect(-28,-6,56,12); ctx.fillRect(-6,-28,12,56); ctx.restore(); }
+  function draw(t){
+    ctx.clearRect(0,0,720,420);
+    if(t>=3500 && t<=8500){ const cx=-64+170*((t-3500)/1000); drawCross(cx,crossY); }
+    const pts=gaze.filter(function(g){return g.t<=t;});
+    const recent=pts.slice(-40);
+    for(let i=0;i<recent.length;i++){ const a=(i+1)/recent.length; ctx.fillStyle="rgba(202,162,42,"+(0.15+0.75*a).toFixed(2)+")"; ctx.beginPath(); ctx.arc(recent[i].x,recent[i].y,2.5+2.5*a,0,7); ctx.fill(); }
+    $("rpT").textContent="时间 "+(t/1000).toFixed(1)+" / 14.0 秒";
+  }
+  let startT=null, raf=0;
+  function frame(ts){ if(startT==null) startT=ts; const t=ts-startT; draw(Math.min(t,dur)); if(t<dur) raf=requestAnimationFrame(frame); }
+  $("rpPlay").addEventListener("click",function(){ startT=null; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); });
+  draw(0);
+}
+function ibResult(){
+  const crit=S.ib.rows.filter(function(r){return r.type==="critical";})[0];
+  const counts=S.ib.rows.filter(function(r){return r.type==="count";});
+  const acc=counts.length?Math.round(mean(counts.map(function(r){return r.count_correct;}))*100):0;
+  setScreen(
+    '<div class="card center"><h1>👁 实验一 完成</h1><p class="muted" id="up">上传状态：'+(S.upload.ib||"处理中…")+'</p><p class="center"><button class="ghost" id="csv">下载本实验 CSV</button></p></div>' +
+    '<div class="card" id="ownCard"></div>' +
+    '<div class="card"><h2>全体被试</h2><p class="muted" id="grpLoad">正在读取后台数据…</p><div id="grpBody"></div></div>' +
+    '<div class="card center"><p class="center"><button id="home">返回实验选择</button></p></div>'
+  );
+  pollUpload("up","ib");
+  $("csv").addEventListener("click",function(){ downloadCSV("ib"); });
+  $("home").addEventListener("click",function(){ screenOverview(); });
+  const condTxt=S.ib.cond==="same_color"?"意外物与注意集同色（蓝）":"意外物与注意集异色（暗橄榄）";
+  let html='<h2>你的结果</h2><table><tr><th>分组</th><th>计数准确率</th><th>是否觉察到意外物</th></tr>';
+  html+='<tr><td>'+condTxt+'</td><td>'+acc+'%</td><td>'+(crit&&crit.noticed?'<b class="ok">是</b>':'<b class="bad">否</b>')+'</td></tr></table>';
+  html+='<p class="muted"><b>怎么算的：</b>计数准确率＝数对的段数 ÷ 总段数；是否觉察＝你报告“看到”且形状选对“十字形”记为觉察。</p>';
+  html+='<p class="muted"><b>这说明什么：</b>“非注意盲”指明明有意外物体从眼前经过却没有意识到。本实验比较意外物颜色是否与你要盯的蓝色（注意集）一致。</p>';
+  if(S.ib.gazeSummary){
+    const g=S.ib.gazeSummary;
+    html+='<h3>你的注视（眼动）</h3><p>关键段共记录 '+g.n+' 个注视点。是否注视到意外物附近：'+(g.fixatedCross?'<b class="ok">是</b>':'<b class="bad">否</b>')+'。</p>';
+    html+='<p class="muted">如果你<b>注视到了却没有觉察</b>，正是不注意盲的典型情形——眼睛看到了，注意却没“看见”。</p>';
+  }
+  // 眼动回放：只要做过实验一就显示这一块；没有注视数据时说明原因
+  html+='<h3>🎬 回放你的眼动轨迹</h3>';
+  if(S.ib.gazeSummary && S.ib.gazeSummary.n>0){
+    html+='<canvas id="rp" width="720" height="420" style="width:100%;max-width:720px;border:1px solid #cfcabb;border-radius:6px;background:#fbfaf6"></canvas>';
+    html+='<p class="center"><button id="rpPlay">▶ 回放</button> <span id="rpT" class="muted"></span></p>';
+    html+='<p class="muted">画面里重放关键段：黄点拖尾是你当时的注视轨迹，十字是那一刻出现的意外物。</p>';
+  } else {
+    html+='<p class="muted">'+(S.ib.eyeUsed
+      ? '本次开启了眼动，但关键段没有记录到足够的注视点（可能是摄像头未授权成功、校准不准，或 WebGazer 预测尚未就绪）。可返回实验选择后重新进入实验一再试一次。'
+      : '本次选择了“直接体验”，没有记录眼动。想看自己的注视轨迹回放，可返回实验选择后重新进入实验一并选择“授权摄像头并开始”。')+'</p>';
+  }
+  $("ownCard").innerHTML=html;
+  if(S.ib.gazeSummary && S.ib.gazeSummary.n>0){ ibReplayBind(); }
+  loadAll(EXP.ib).then(function(recs){
+    const by={same_color:[],diff_color:[]};
+    recs.forEach(function(rec){ const c=rec.condition||""; rec.trials.forEach(function(t){ if(t.type==="critical"||t.cond==="critical"){ const key=c==="diff_color"?"diff_color":"same_color"; by[key].push(Number(t.noticed)||0); } }); });
+    let h='<table><tr><th>分组</th><th>人数</th><th>觉察率</th></tr>';
+    ["same_color","diff_color"].forEach(function(c){ const a=by[c]; h+='<tr><td>'+c+'</td><td>'+a.length+'</td><td>'+(a.length?Math.round(mean(a)*100)+"%":"—")+'</td></tr>'; });
+    h+='</table>';
+    h+='<div class="center">'+barChart([{label:"觉察率",a:by.same_color.length?mean(by.same_color):0,b:by.diff_color.length?mean(by.diff_color):0}], 300,200, 1)+'</div>';
+    h+='<p class="muted">柱图：蓝=同色组觉察率，黄=异色组觉察率。</p>';
+    h+='<p><b>预测核对：</b>预期同色组觉察率<b>高于</b>异色组（与注意集相似的意外物更易被觉察）。数据支持吗？</p>';
+    h+='<p class="muted"><b>与原文对比：</b>原范式中约一半观察者没有注意到意外事件，且后续研究发现与注意集匹配的意外物更容易被觉察——把这里的觉察率和这个经典结果放在一起看。</p>';
+    if(S.ib.gazeSummary){
+      h+='<h3>SEEV 模型：预测 vs 实测注视分配</h3>';
+      const pred={blue:0.55,gray:0.20,cross:0.05};
+      const m=S.ib.gazeSummary.zones;
+      const meas={blue:m.mid, gray:m.top+m.bot, cross:S.ib.gazeSummary.nearCrossRatio};
+      h+='<p class="muted">SEEV 用显著性与自上而下预期预测注视会落到哪里：蓝方块（要盯）最高、意外物（低显著且未预期）最低。</p>';
+      h+='<div class="center">'+barChart([{label:"蓝方块区",a:pred.blue,b:meas.blue},{label:"灰方块区",a:pred.gray,b:meas.gray},{label:"意外物",a:pred.cross,b:meas.cross}], 420,220, 0.7)+'</div>';
+      h+='<p class="muted">蓝=SEEV 预测，黄=本次实测。若“意外物”预测概率很低、实测也低，但仍有人觉察到——说明觉察不一定依赖长时间注视。</p>';
+    }
+    $("grpBody").innerHTML=h; $("grpLoad").textContent="";
+  });
+}
+
+// ============================================================
+//  实验二：Stroop + 一致性概率
+// ============================================================
+const INK={"红":"#d0342c","绿":"#2e8b57","蓝":"#3355cc","黄":"#c98a00"};
+const WORDS=["红","绿","蓝","黄"];
+const KEYS={"KeyF":"红","KeyG":"绿","KeyH":"蓝","KeyJ":"黄"};
+function enterStroop(){ if(!requirePid()) return; screenStroopIntro(); }
+function screenStroopIntro(){
+  setScreen(
+    '<div class="card"><h2>🎨 实验二 · 判断字的颜色</h2>' +
+      '<p>屏幕中央会逐个出现一个汉字（红/绿/蓝/黄）。这个字本身有含义，但它会被涂成某一种颜色。</p>' +
+      '<p>你<b>不要管字的意思，只判断它被涂成了什么颜色</b>，尽快按键：</p>' +
+      '<p class="center"><span class="km">F=红</span><span class="km">G=绿</span><span class="km">H=蓝</span><span class="km">J=黄</span></p>' +
+      '<p>先做 8 次练习（有对错反馈），再做两个正式部分（各 50 次，无反馈）。</p>' +
+      '<p class="muted">（Stroop, 1935 的字色干扰范式）</p>' +
+      '<p class="center"><button id="go">开始练习</button></p></div>'
+  );
+  $("go").addEventListener("click",function(){ stroopRunPractice(); });
+}
+function stroopRunPractice(){
+  const trials=[];
+  for(let i=0;i<4;i++){ const w=pick(WORDS); trials.push({word:w,ink:w,cond:"congruent"}); }
+  for(let i=0;i<4;i++){ const w=pick(WORDS); const ink=pick(WORDS.filter(function(c){return c!==w;})); trials.push({word:w,ink:ink,cond:"incongruent"}); }
+  shuffle(trials);
+  stroopRunSeq(trials,true,0,function(){
+    S.stroop.order=Math.random()<0.5?"p50_first":"p80_first";
+    stroopBlockIntro(S.stroop.order==="p50_first"?"p50":"p80",1);
+  });
+}
+function stroopBlockIntro(prob,bi){
+  const desc=prob==="p80"?"本部分共 50 个字，其中 <b>80%</b>（40 个）颜色与字义一致，20%（10 个）不一致。":"本部分共 50 个字，颜色与字义一致、不一致<b>各 25 个</b>。";
+  setScreen('<div class="card center"><h2>正式部分 '+bi+' / 2</h2><p>'+desc+'</p><p>又快又准。</p><p class="center"><button id="go">开始</button></p></div>');
+  $("go").addEventListener("click",function(){
+    const trials=stroopGen(prob==="p80"?0.8:0.5,50,prob);
+    stroopRunSeq(trials,false,0,function(){ if(bi===1){ stroopRest(prob==="p80"?"p50":"p80",2); } else { stroopFinish(); } });
+  });
+}
+function stroopRest(np,ni){
+  setScreen('<div class="card center"><h2>第一部分完成</h2><p>休息几秒，准备好后开始第二部分。</p><p class="center"><button id="go">继续</button></p></div>');
+  $("go").addEventListener("click",function(){ stroopBlockIntro(np,ni); });
+}
+function stroopGen(pCon,n,probLabel){
+  const nCon=Math.round(n*pCon), nIncon=n-nCon, out=[];
+  for(let i=0;i<nCon;i++){ const w=pick(WORDS); out.push({word:w,ink:w,cond:"congruent",block:probLabel}); }
+  for(let i=0;i<nIncon;i++){ const w=pick(WORDS); const ink=pick(WORDS.filter(function(c){return c!==w;})); out.push({word:w,ink:ink,cond:"incongruent",block:probLabel}); }
+  return shuffle(out);
+}
+function stroopRunSeq(trials,practice,i,onDone){
+  if(i>=trials.length){ onDone(); return; }
+  const tr=trials[i];
+  setScreen('<p class="hint">判断<b>字的颜色</b>，不要管字义</p><div class="stim" id="stim">+</div><p class="center muted"><span class="km">F=红</span><span class="km">G=绿</span><span class="km">H=蓝</span><span class="km">J=黄</span></p>');
+  const stim=$("stim");
+  setTimeout(function(){
+    stim.textContent=tr.word; stim.style.color=INK[tr.ink];
+    const onset=performance.now(); let answered=false;
+    function onKey(e){ if(!KEYS[e.code]||answered) return; answered=true; finish(KEYS[e.code],performance.now()-onset); }
+    document.addEventListener("keydown",onKey);
+    const to=setTimeout(function(){ if(!answered){ answered=true; finish("",2000); } },2000);
+    function finish(key,rt){
+      clearTimeout(to); document.removeEventListener("keydown",onKey);
+      const correct=key===tr.ink?1:0;
+      if(practice){ stim.textContent=correct?"✓":("应为 "+tr.ink); stim.style.color=correct?"#1c7a3a":"#b03030"; setTimeout(function(){ stroopRunSeq(trials,practice,i+1,onDone); },600); }
+      else{ S.stroop.rows.push({exp:"stroop",cond:tr.cond,trial:S.stroop.rows.length+1,rt:Math.round(rt),correct:correct,block:tr.block,word:tr.word,ink:tr.ink,key:key}); stroopRunSeq(trials,practice,i+1,onDone); }
+    }
+  },500);
+}
+function stroopFinish(){ S.stroop.done=true; submitData("stroop",EXP.stroop,S.stroop.order,S.stroop.rows); screenExpEnd("🎨 实验二","stroop",stroopResult); }
+function stroopResult(){
+  const rows=S.stroop.rows;
+  function effOf(sub){
+    const con=sub.filter(function(r){return r.cond==="congruent"&&r.correct&&r.rt<2000;}).map(function(r){return r.rt;});
+    const inc=sub.filter(function(r){return r.cond==="incongruent"&&r.correct&&r.rt<2000;}).map(function(r){return r.rt;});
+    return {con:con.length?Math.round(mean(con)):0, inc:inc.length?Math.round(mean(inc)):0, eff:(con.length&&inc.length)?Math.round(mean(inc)-mean(con)):0, acc:sub.length?Math.round(mean(sub.map(function(r){return r.correct;}))*100):0};
+  }
+  const o={p50:effOf(rows.filter(function(r){return r.block==="p50";})), p80:effOf(rows.filter(function(r){return r.block==="p80";}))};
+  setScreen(
+    '<div class="card center"><h1>🎨 实验二 完成</h1><p class="muted" id="up">上传状态：'+(S.upload.stroop||"处理中…")+'</p><p class="center"><button class="ghost" id="csv">下载本实验 CSV</button></p></div>' +
+    '<div class="card" id="ownCard"></div>' +
+    '<div class="card"><h2>全体被试</h2><p class="muted" id="grpLoad">正在读取后台数据…</p><div id="grpBody"></div></div>' +
+    '<div class="card center"><p class="center"><button id="home">返回实验选择</button></p></div>'
+  );
+  pollUpload("up","stroop");
+  $("csv").addEventListener("click",function(){ downloadCSV("stroop"); });
+  $("home").addEventListener("click",function(){ screenOverview(); });
+  let h='<h2>你的结果</h2><table><tr><th>block</th><th>一致 RT(ms)</th><th>不一致 RT(ms)</th><th>一致性效应(ms)</th><th>正确率</th></tr>';
+  ["p50","p80"].forEach(function(b){ const e=o[b]; h+='<tr><td>'+b+'</td><td>'+e.con+'</td><td>'+e.inc+'</td><td><b>'+e.eff+'</b></td><td>'+e.acc+'%</td></tr>'; });
+  h+='</table>';
+  h+='<p class="muted"><b>怎么算的：</b>一致性效应＝不一致试次平均 RT − 一致试次平均 RT（只算正确且 &lt;2000ms 的试次）。效应越大，字义对颜色判断的干扰越强。</p>';
+  h+='<p class="muted"><b>这说明什么：</b>比较 p80 与 p50。若 p80 的一致性效应<b>更大</b>，说明当一致情况占多数时，你会形成“多半一致”的预期，反而在少见的不一致试次上更慢——预期放大了冲突。</p>';
+  $("ownCard").innerHTML=h;
+  loadAll(EXP.stroop).then(function(recs){
+    const per={p50:[],p80:[]};
+    recs.forEach(function(rec){ ["p50","p80"].forEach(function(b){ const sub=rec.trials.filter(function(t){return t.block===b;}); const e=effOf(sub); if(e.eff) per[b].push(e.eff); }); });
+    let gh='<table><tr><th>block</th><th>被试数</th><th>平均一致性效应(ms)</th></tr>';
+    ["p50","p80"].forEach(function(b){ gh+='<tr><td>'+b+'</td><td>'+per[b].length+'</td><td><b>'+(per[b].length?Math.round(mean(per[b])):"—")+'</b></td></tr>'; });
+    gh+='</table>';
+    gh+='<div class="center">'+barChart([{label:"p50",a:o.p50.eff,b:per.p50.length?mean(per.p50):0},{label:"p80",a:o.p80.eff,b:per.p80.length?mean(per.p80):0}],340,220,300)+'</div>';
+    gh+='<p class="muted">柱图：蓝=你自己，黄=全体平均。</p>';
+    gh+='<p><b>预测核对：</b>预期 p80 的一致性效应 &gt; p50。全班数据是否一致？</p>';
+    gh+='<p class="muted"><b>与原文对比：</b>经典字色干扰研究的最稳定发现是不一致试次显著更慢，按键反应的干扰效应通常约 50–100 ms。看你的 p50 效应是否落在这一区间，p80 是否比 p50 更大。</p>';
+    $("grpBody").innerHTML=gh; $("grpLoad").textContent="";
+  });
+}
+
+// ============================================================
+//  实验三：比例判断 + SSTS
+// ============================================================
+function enterProp(){ if(!requirePid()) return; screenPropIntro(); }
+function screenPropIntro(){
+  setScreen(
+    '<div class="card"><h2>📐 实验三 · 估计阴影占多少</h2>' +
+      '<p>屏幕上会出现一根竖直的柱子，底部被灰色阴影填满一段。请估计<b>阴影部分占整根柱子的百分比</b>（0 到 100）。</p>' +
+      '<p>柱子右侧有刻度线可帮你读数。注意：不同柱子可能用<b>不同刻度</b>（均匀的，或不均匀的），请按刻度线读数。</p>' +
+      '<p>输入一个 0–100 的整数后按确认（或回车）。先做 4 次练习（会显示真实值），再做 40 次正式（无反馈）。</p>' +
+      '<p class="muted">（Cleveland &amp; McGill, 1984 的图形比例判断）</p>' +
+      '<p class="center"><button id="go">开始练习</button></p></div>'
+  );
+  $("go").addEventListener("click",function(){ propRunPractice(); });
+}
+function scaleFn(scale){ return scale==="log" ? function(q){return Math.log10(1+9*q);} : function(q){return q;}; }
+function propStimHTML(p,scale){
+  const H=360, f=scaleFn(scale), fillH=H*f(p);
+  const ticks=[0,25,50,75,100].map(function(L){ const y=H*(1-f(L/100)); return '<div class="tick" style="bottom:'+y.toFixed(1)+'px"><span>'+L+'</span></div>'; }).join("");
+  return '<div class="prop-stage"><div><div class="prop-bar"><div class="prop-fill" style="height:'+fillH.toFixed(1)+'px"></div>'+ticks+'</div><div class="scale-tag">'+(scale==="log"?"对数刻度":"线性刻度")+'</div></div></div>'+
+    '<p class="center">阴影约占整根柱子的 <input type="number" id="est" min="0" max="100" step="1" /> % <button id="ok">确认</button></p>';
+}
+function propRunPractice(){
+  const pts=shuffle([{p:0.30,scale:"linear"},{p:0.70,scale:"linear"},{p:0.30,scale:"log"},{p:0.70,scale:"log"}]);
+  propRunSeq(pts,true,0,function(){ propRunFormal(); });
+}
+function propRunFormal(){
+  const pSet=[0.05,0.09,0.14,0.19,0.24,0.29,0.34,0.40,0.46,0.52,0.58,0.64,0.70,0.76,0.82,0.87,0.92,0.95,0.97,0.99];
+  const lin=pSet.map(function(p){return {p:p,scale:"linear"};}); const log=pSet.map(function(p){return {p:p,scale:"log"};});
+  shuffle(lin); shuffle(log); const all=[]; for(let i=0;i<lin.length;i++){ all.push(lin[i]); all.push(log[i]); } shuffle(all);
+  propRunSeq(all,false,0,function(){ propFinish(); });
+}
+function propRunSeq(items,practice,i,onDone){
+  if(i>=items.length){ onDone(); return; }
+  const it=items[i];
+  setScreen('<p class="hint">估计阴影占整根柱子的百分比</p>'+propStimHTML(it.p,it.scale));
+  const est=$("est"), ok=$("ok"); const onset=performance.now(); est.focus();
+  function submit(){
+    const v=Number(est.value); if(!Number.isFinite(v)||v<0||v>100){ est.focus(); return; }
+    const rt=Math.round(performance.now()-onset); const pEst=v/100; const bias=pEst-it.p; const absErr=Math.abs(bias); const correct=absErr<=0.10?1:0;
+    if(!practice){ S.prop.rows.push({exp:"prop",cond:it.scale,trial:S.prop.rows.length+1,rt:rt,correct:correct,p_true:+it.p.toFixed(3),p_est:+pEst.toFixed(3),bias:+bias.toFixed(3)}); propRunSeq(items,practice,i+1,onDone); }
+    else{ setScreen('<div class="card center"><h2>你估了 '+v+'%，真实值是 '+Math.round(it.p*100)+'%</h2><p class="muted">误差 '+Math.round(absErr*100)+' 个百分点。'+(i<items.length-1?"继续练习。":"练习结束，下面正式开始。")+'</p><p class="center"><button id="next">继续</button></p></div>'); $("next").addEventListener("click",function(){ propRunSeq(items,practice,i+1,onDone); }); }
+  }
+  ok.addEventListener("click",submit); est.addEventListener("keydown",function(e){ if(e.key==="Enter") submit(); });
+}
+function propFinish(){ S.prop.done=true; submitData("prop",EXP.prop,"linear_vs_log",S.prop.rows); screenExpEnd("📐 实验三","prop",propResult); }
+// SSTS 预测偏差曲线：线性单交叉 cos(πp)，对数双频 cos(2πp)，幅值 0.15
+function sstsCurve(scale){ const A=0.15, pts=[]; for(let i=0;i<=50;i++){ const p=i/50; const b=scale==="log"? A*Math.cos(2*Math.PI*p) : A*Math.cos(Math.PI*p); pts.push([p,b]); } return pts; }
+function propResult(){
+  const rows=S.prop.rows;
+  function binBias(sub,lo,hi){ const a=sub.filter(function(r){return r.p_true>=lo&&r.p_true<hi;}).map(function(r){return r.bias;}); return a.length?mean(a):NaN; }
+  function absErr(sub){ const a=sub.map(function(r){return Math.abs(r.bias);}); return a.length?mean(a):NaN; }
+  setScreen(
+    '<div class="card center"><h1>📐 实验三 完成</h1><p class="muted" id="up">上传状态：'+(S.upload.prop||"处理中…")+'</p><p class="center"><button class="ghost" id="csv">下载本实验 CSV</button></p></div>' +
+    '<div class="card" id="ownCard"></div>' +
+    '<div class="card"><h2>全体被试 + SSTS 模型预测</h2><p class="muted" id="grpLoad">正在读取后台数据…</p><div id="grpBody"></div></div>' +
+    '<div class="card center"><p class="center"><button id="home">返回首页</button></p></div>'
+  );
+  pollUpload("up","prop");
+  $("csv").addEventListener("click",function(){ downloadCSV("prop"); });
+  $("home").addEventListener("click",function(){ screenOverview(); });
+  let h='<h2>你的结果</h2><table><tr><th>刻度</th><th>低段偏差</th><th>中段偏差</th><th>高段偏差</th><th>平均绝对误差</th></tr>';
+  ["linear","log"].forEach(function(sc){ const sub=rows.filter(function(r){return r.cond===sc;});
+    const f=function(v){return Number.isFinite(v)?(v*100).toFixed(1):"—";};
+    h+='<tr><td>'+sc+'</td><td>'+f(binBias(sub,0,0.34))+'</td><td>'+f(binBias(sub,0.34,0.66))+'</td><td>'+f(binBias(sub,0.66,1.01))+'</td><td>'+(absErr(sub)*100).toFixed(1)+'</td></tr>'; });
+  h+='</table>';
+  h+='<p class="muted"><b>怎么算的：</b>偏差＝估计 − 真实（百分点，正为高估、负为低估）；平均绝对误差＝|估计 − 真实| 的均值。低/中/高段按真实比例 0–34%、34–66%、66–100% 划分。</p>';
+  h+='<p class="muted"><b>这说明什么：</b>线性刻度下应出现“低比例高估、高比例低估”的单交叉循环；对数刻度预测偏差曲线频率加倍，出现第二个交叉点。</p>';
+  h+='<h3>你的偏差散点 vs SSTS 预测</h3>';
+  ["linear","log"].forEach(function(sc){
+    const sub=rows.filter(function(r){return r.cond===sc;});
+    const own=sub.map(function(r){return [r.p_true,r.bias];});
+    h+='<p class="center">'+(sc==="linear"?"线性刻度":"对数刻度")+'</p>';
+    h+='<div class="center">'+biasChart(sstsCurve(sc), own, [], 480, 320)+'</div>';
+  });
+  h+='<p class="muted">虚线＝SSTS 模型预测的偏差形状；红点＝你每个试次的偏差。</p>';
+  $("ownCard").innerHTML=h;
+  loadAll(EXP.prop).then(function(recs){
+    const bins={linear:[],log:[]};
+    ["linear","log"].forEach(function(sc){
+      const sub=[]; recs.forEach(function(rec){ rec.trials.forEach(function(t){ if(t.cond===sc) sub.push(t); }); });
+      const pts=[]; [[0,0.2],[0.2,0.4],[0.4,0.6],[0.6,0.8],[0.8,1.01]].forEach(function(rng){
+        const a=sub.filter(function(t){ const p=Number(t.p_true); return p>=rng[0]&&p<rng[1]; }).map(function(t){return Number(t.bias);});
+        if(a.length) pts.push([(rng[0]+rng[1])/2, mean(a)]);
+      });
+      bins[sc]=pts;
+    });
+    let gh='<table><tr><th>刻度</th><th>低段偏差</th><th>中段偏差</th><th>高段偏差</th></tr>';
+    ["linear","log"].forEach(function(sc){
+      const sub=[]; recs.forEach(function(rec){ rec.trials.forEach(function(t){ if(t.cond===sc) sub.push(t); }); });
+      const f=function(v){return Number.isFinite(v)?(v*100).toFixed(1):"—";};
+      gh+='<tr><td>'+sc+'</td><td>'+f(binBias(sub,0,0.34))+'</td><td>'+f(binBias(sub,0.34,0.66))+'</td><td>'+f(binBias(sub,0.66,1.01))+'</td></tr>';
+    });
+    gh+='</table>';
+    gh+='<h3>全体偏差 vs SSTS 预测</h3>';
+    ["linear","log"].forEach(function(sc){
+      gh+='<p class="center">'+(sc==="linear"?"线性刻度":"对数刻度")+'</p>';
+      gh+='<div class="center">'+biasChart(sstsCurve(sc), [], bins[sc], 480, 320)+'</div>';
+    });
+    gh+='<p class="muted">虚线＝SSTS 预测；黄方块＝全体被试各比例段的平均偏差。</p>';
+    gh+='<p><b>预测核对：</b>看对数刻度的偏差曲线是否比线性刻度多出一个交叉点（方向反转）。</p>';
+    gh+='<p class="muted"><b>与原文对比：</b>经典比例判断研究发现低比例被高估、高比例被低估（单交叉循环），改变刻度会让偏差曲线的交叉点移动甚至加倍。把上面全班曲线的形状与这一经典模式对照。</p>';
+    $("grpBody").innerHTML=gh; $("grpLoad").textContent="";
+  });
+}
+
+// ====== 轮询上传状态 ======
+function pollUpload(id,key){ const el=$(id); const iv=setInterval(function(){ el.textContent="上传状态："+(S.upload[key]||"处理中…"); if(S.upload[key]) clearInterval(iv); },500); }
+
+// ====== 启动 ======
+screenConsent();
+</script>
+</body>
+</html>
